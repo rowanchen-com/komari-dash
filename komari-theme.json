@@ -1,0 +1,26 @@
+{
+  "name": "Komari Dash",
+  "short": "KomariDash",
+  "description": "A beautiful server monitoring dashboard theme for Komari, ported from NezhaDash",
+  "version": "3.1.9",
+  "author": "hamster1963",
+  "url": "https://github.com/hamster1963/nezha-dash",
+  "preview": "preview.png",
+  "configuration": {
+    "type": "managed",
+    "name": "KomariDash Settings",
+    "data": [
+      { "name": "显示设置", "type": "title" },
+      { "key": "showFlag", "name": "显示国旗", "type": "switch", "default": true, "help": "在服务器卡片上显示国旗图标" },
+      { "key": "showTag", "name": "显示分组标签", "type": "switch", "default": true, "help": "显示服务器分组标签筛选" },
+      { "key": "showNetTransfer", "name": "显示流量统计", "type": "switch", "default": false, "help": "在服务器卡片上显示总上传/下载流量" },
+      { "key": "disableCartoon", "name": "禁用卡通图标", "type": "switch", "default": false, "help": "隐藏网络卡片上的卡通图标" },
+      { "key": "fixedTopServerName", "name": "固定顶部服务器名", "type": "switch", "default": false, "help": "将服务器名称固定在卡片顶部" },
+      { "key": "showTagCount", "name": "显示分组数量", "type": "switch", "default": false, "help": "在分组标签旁显示服务器数量" },
+      { "name": "自定义设置", "type": "title" },
+      { "key": "customLogo", "name": "自定义Logo URL", "type": "string", "default": "", "help": "自定义Logo图片地址" },
+      { "key": "customDescription", "name": "自定义描述", "type": "string", "default": "", "help": "自定义站点描述文字" },
+      { "key": "customLinks", "name": "自定义链接", "type": "string", "default": "", "help": "JSON格式的自定义链接，如: [{\"link\":\"https://example.com\",\"name\":\"Example\"}]" }
+    ]
+  }
+}
