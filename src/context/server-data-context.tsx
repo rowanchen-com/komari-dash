@@ -116,7 +116,7 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
 
         nodes.forEach((node, i) => {
           const result = recentResults[i]
-          if (result.status === "fulfilled" && result.value.length > 0) {
+          if (result.status === "fulfilled" && result.value?.length > 0) {
             onlineUuids.push(node.uuid)
             wsData[node.uuid] = result.value[0]
           }
@@ -155,9 +155,9 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
         ws.onmessage = (event) => {
           try {
             const msg: KomariWsMessage = JSON.parse(event.data)
-            if (msg.status !== "success") return
+            if (msg.status !== "success" || !msg.data) return
 
-            const overview = buildOverview(nodes, msg.data.online, msg.data.data)
+            const overview = buildOverview(nodes, msg.data.online || [], msg.data.data || {})
             setData(overview)
             setHistory((prev) => {
               const newHistory = [
@@ -195,7 +195,7 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
               const wsData: Record<string, KomariRecentData> = {}
               nodes.forEach((node, i) => {
                 const result = recentResults[i]
-                if (result.status === "fulfilled" && result.value.length > 0) {
+                if (result.status === "fulfilled" && result.value?.length > 0) {
                   onlineUuids.push(node.uuid)
                   wsData[node.uuid] = result.value[0]
                 }
