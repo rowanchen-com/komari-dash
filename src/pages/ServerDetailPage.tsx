@@ -98,7 +98,7 @@ export default function ServerDetailPage() {
         <InfoCard label={t("ServerDetail", "Uptime")}>
           <div className="text-xs">{formatUptime(server.status.uptime, t)}</div>
         </InfoCard>
-        {serverVersion && <InfoCard label={t("ServerDetail", "Version")}><div className="text-xs">{serverVersion}</div></InfoCard>}
+        {(server.version || serverVersion) && <InfoCard label={t("ServerDetail", "Version")}><div className="text-xs">{server.version || serverVersion}</div></InfoCard>}
         {server.host.arch && <InfoCard label={t("ServerDetail", "Arch")}><div className="text-xs">{server.host.arch}</div></InfoCard>}
         <InfoCard label={t("ServerDetail", "Mem")}><div className="text-xs">{formatBytes(server.host.memTotal)}</div></InfoCard>
         <InfoCard label={t("ServerDetail", "Disk")}><div className="text-xs">{formatBytes(server.host.diskTotal)}</div></InfoCard>

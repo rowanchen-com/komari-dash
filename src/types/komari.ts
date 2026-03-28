@@ -26,6 +26,7 @@ export interface KomariNode {
   hidden: boolean
   traffic_limit: number
   traffic_limit_type: string
+  version: string
   created_at: string
   updated_at: string
 }

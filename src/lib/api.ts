@@ -5,7 +5,6 @@ import type {
   KomariPublicInfo,
   KomariPingData,
   ServerInfo,
-  ServerOverview,
 } from "@/types/komari"
 
 // Base URL is relative - Komari serves the theme from the same origin
@@ -56,7 +55,7 @@ export function normalizeServer(
       process: recent?.process ?? 0,
     },
     updatedAt: recent?.updated_at ?? "",
-    version: recent?.message ?? "",
+    version: node.version || "",
   }
 }
 
@@ -79,53 +78,6 @@ export async function fetchPublicInfo(): Promise<KomariPublicInfo> {
   const json: KomariApiResponse<KomariPublicInfo> = await res.json()
   if (json.status !== "success") throw new Error(json.message || "Failed to fetch public info")
   return json.data
-}
-
-export async function fetchServerOverview(): Promise<ServerOverview> {
-  const nodes = await fetchNodes()
-
-  // Fetch recent data for all nodes concurrently
-  const recentResults = await Promise.allSettled(
-    nodes.map((n) => fetchRecent(n.uuid)),
-  )
-
-  const overview: ServerOverview = {
-    total: nodes.length,
-    online: 0,
-    offline: 0,
-    totalInBandwidth: 0,
-    totalOutBandwidth: 0,
-    totalInSpeed: 0,
-    totalOutSpeed: 0,
-    servers: [],
-  }
-
-  nodes.forEach((node, i) => {
-    const result = recentResults[i]
-    const recent =
-      result.status === "fulfilled" && result.value.length > 0
-        ? result.value[0]
-        : undefined
-    const isOnline = !!recent
-
-    const server = normalizeServer(node, recent, isOnline)
-
-    if (!node.hidden) {
-      overview.servers.push(server)
-    }
-
-    if (isOnline) {
-      overview.online++
-      overview.totalInBandwidth += server.status.netInTransfer
-      overview.totalOutBandwidth += server.status.netOutTransfer
-      overview.totalInSpeed += server.status.netInSpeed
-      overview.totalOutSpeed += server.status.netOutSpeed
-    } else {
-      overview.offline++
-    }
-  })
-
-  return overview
 }
 
 export async function fetchVersion(): Promise<string> {
@@ -152,6 +104,33 @@ export async function fetchPingRecords(uuid: string, hours = 48): Promise<Komari
     return json.data
   } catch {
     return { count: 0, records: [], tasks: [] }
+  }
+}
+
+// RPC2: fetch node versions via common:getNodes (version only visible when authenticated)
+export async function fetchNodeVersionsRpc2(): Promise<Record<string, string>> {
+  try {
+    const res = await fetch(`${BASE}/api/rpc2`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "common:getNodes",
+        id: 1,
+      }),
+    })
+    if (!res.ok) return {}
+    const json = await res.json()
+    if (json.error || !json.result) return {}
+    // result is { [uuid]: Client } — extract version per uuid
+    const versions: Record<string, string> = {}
+    for (const [uuid, node] of Object.entries(json.result)) {
+      const v = (node as any).version
+      if (v) versions[uuid] = v
+    }
+    return versions
+  } catch {
+    return {}
   }
 }
 

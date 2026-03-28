@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react"
 import type { ServerOverview, ServerInfo, KomariWsMessage, KomariRecentData, KomariNode } from "@/types/komari"
-import { fetchNodes, fetchRecent, fetchVersion, normalizeServer, createWsUrl } from "@/lib/api"
+import { fetchNodes, fetchRecent, fetchVersion, fetchNodeVersionsRpc2, normalizeServer, createWsUrl } from "@/lib/api"
 
 export interface ServerDataWithTimestamp {
   timestamp: number
@@ -100,8 +100,14 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
     const init = async () => {
       try {
         // Fetch nodes list and version concurrently
-        const [nodes, version] = await Promise.all([fetchNodes(), fetchVersion()])
+        const [nodes, version, nodeVersions] = await Promise.all([fetchNodes(), fetchVersion(), fetchNodeVersionsRpc2()])
         if (cancelled) return
+        // Merge RPC2 versions into nodes
+        for (const node of nodes) {
+          if (nodeVersions[node.uuid]) {
+            node.version = nodeVersions[node.uuid]
+          }
+        }
         nodesRef.current = nodes
         setServerVersion(version)
 
