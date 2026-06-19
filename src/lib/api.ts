@@ -10,6 +10,43 @@ import type {
 // Base URL is relative - Komari serves the theme from the same origin
 const BASE = ""
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
+}
+
+function isSuccessResponse<T>(json: unknown): json is KomariApiResponse<T> {
+  return isRecord(json) && json.status === "success" && "data" in json
+}
+
+function errorMessage(json: unknown, fallback: string) {
+  return isRecord(json) && typeof json.message === "string" ? json.message : fallback
+}
+
+async function readApiData<T>(
+  response: Response,
+  fallbackMessage: string,
+  validate?: (data: unknown) => boolean,
+): Promise<T> {
+  if (!response.ok) {
+    throw new Error(`${fallbackMessage} (HTTP ${response.status})`)
+  }
+
+  const json: unknown = await response.json()
+  if (!isSuccessResponse<T>(json)) {
+    throw new Error(errorMessage(json, fallbackMessage))
+  }
+
+  if (validate && !validate(json.data)) {
+    throw new Error(`${fallbackMessage}: invalid data format`)
+  }
+
+  return json.data
+}
+
+function asNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0
+}
+
 export function normalizeServer(
   node: KomariNode,
   recent?: KomariRecentData,
@@ -38,21 +75,22 @@ export function normalizeServer(
       diskTotal: node.disk_total,
     },
     status: {
-      cpu: recent?.cpu.usage ?? 0,
-      memUsed: recent?.ram.used ?? 0,
-      swapUsed: recent?.swap.used ?? 0,
-      diskUsed: recent?.disk.used ?? 0,
-      netInSpeed: recent?.network.down ?? 0,
-      netOutSpeed: recent?.network.up ?? 0,
-      netInTransfer: recent?.network.totalDown ?? 0,
-      netOutTransfer: recent?.network.totalUp ?? 0,
-      uptime: recent?.uptime ?? 0,
-      load1: recent?.load.load1 ?? 0,
-      load5: recent?.load.load5 ?? 0,
-      load15: recent?.load.load15 ?? 0,
-      tcpConn: recent?.connections.tcp ?? 0,
-      udpConn: recent?.connections.udp ?? 0,
-      process: recent?.process ?? 0,
+      cpu: asNumber(recent?.cpu?.usage),
+      memUsed: asNumber(recent?.ram?.used),
+      swapUsed: asNumber(recent?.swap?.used),
+      diskUsed: asNumber(recent?.disk?.used),
+      netInSpeed: asNumber(recent?.network?.down),
+      netOutSpeed: asNumber(recent?.network?.up),
+      netInTransfer: asNumber(recent?.network?.totalDown),
+      netOutTransfer: asNumber(recent?.network?.totalUp),
+      uptime: asNumber(recent?.uptime),
+      load1: asNumber(recent?.load?.load1),
+      load5: asNumber(recent?.load?.load5),
+      load15: asNumber(recent?.load?.load15),
+      tcpConn: asNumber(recent?.connections?.tcp),
+      udpConn: asNumber(recent?.connections?.udp),
+      process: asNumber(recent?.process),
+      gpu: asNumber(recent?.gpu?.average_usage),
     },
     updatedAt: recent?.updated_at ?? "",
     version: node.version || "",
@@ -61,31 +99,28 @@ export function normalizeServer(
 
 export async function fetchNodes(): Promise<KomariNode[]> {
   const res = await fetch(`${BASE}/api/nodes`)
-  const json: KomariApiResponse<KomariNode[]> = await res.json()
-  if (json.status !== "success") throw new Error(json.message || "Failed to fetch nodes")
-  return json.data
+  return readApiData<KomariNode[]>(res, "Failed to fetch nodes", Array.isArray)
 }
 
 export async function fetchRecent(uuid: string): Promise<KomariRecentData[]> {
   const res = await fetch(`${BASE}/api/recent/${uuid}`)
-  const json: KomariApiResponse<KomariRecentData[]> = await res.json()
-  if (json.status !== "success") throw new Error(json.message || "Failed to fetch recent data")
-  return json.data
+  return readApiData<KomariRecentData[]>(res, "Failed to fetch recent data", Array.isArray)
 }
 
 export async function fetchPublicInfo(): Promise<KomariPublicInfo> {
   const res = await fetch(`${BASE}/api/public`)
-  const json: KomariApiResponse<KomariPublicInfo> = await res.json()
-  if (json.status !== "success") throw new Error(json.message || "Failed to fetch public info")
-  return json.data
+  return readApiData<KomariPublicInfo>(res, "Failed to fetch public info", isRecord)
 }
 
 export async function fetchVersion(): Promise<string> {
   try {
     const res = await fetch(`${BASE}/api/version`)
-    const json: KomariApiResponse<{ version: string; hash: string }> = await res.json()
-    if (json.status !== "success") return ""
-    return json.data.version || ""
+    const data = await readApiData<{ version?: string; hash?: string }>(
+      res,
+      "Failed to fetch version",
+      isRecord,
+    )
+    return typeof data.version === "string" ? data.version : ""
   } catch {
     return ""
   }
@@ -97,11 +132,12 @@ export async function fetchPingRecords(uuid: string, hours = 48): Promise<Komari
     if (!res.ok) {
       return { count: 0, records: [], tasks: [] }
     }
-    const json: KomariApiResponse<KomariPingData> = await res.json()
-    if (json.status !== "success" || !json.data) {
-      return { count: 0, records: [], tasks: [] }
+    const data = await readApiData<KomariPingData>(res, "Failed to fetch ping records", isRecord)
+    return {
+      count: asNumber(data.count),
+      records: Array.isArray(data.records) ? data.records : [],
+      tasks: Array.isArray(data.tasks) ? data.tasks : [],
     }
-    return json.data
   } catch {
     return { count: 0, records: [], tasks: [] }
   }
@@ -120,13 +156,13 @@ export async function fetchNodeVersionsRpc2(): Promise<Record<string, string>> {
       }),
     })
     if (!res.ok) return {}
-    const json = await res.json()
-    if (json.error || !json.result) return {}
+    const json: unknown = await res.json()
+    if (!isRecord(json) || json.error || !isRecord(json.result)) return {}
     // result is { [uuid]: Client } — extract version per uuid
     const versions: Record<string, string> = {}
     for (const [uuid, node] of Object.entries(json.result)) {
-      const v = (node as any).version
-      if (v) versions[uuid] = v
+      const v = isRecord(node) ? node.version : undefined
+      if (typeof v === "string") versions[uuid] = v
     }
     return versions
   } catch {

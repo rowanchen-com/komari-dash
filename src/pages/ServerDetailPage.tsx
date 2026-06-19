@@ -119,7 +119,14 @@ export default function ServerDetailPage() {
         <section className="mt-1 flex flex-wrap gap-2">
           <InfoCard label={t("ServerDetail", "System")}><div className="text-xs">{server.host.os}</div></InfoCard>
           {server.host.cpu && <InfoCard label={t("ServerDetail", "CPU")}><div className="text-xs">{server.host.cpu}</div></InfoCard>}
-          {server.host.gpu && server.host.gpu !== "None" && <InfoCard label="GPU"><div className="text-xs">{server.host.gpu}</div></InfoCard>}
+          {server.host.gpu && server.host.gpu !== "None" && (
+            <InfoCard label="GPU">
+              <div className="text-xs">
+                {server.host.gpu}
+                {server.status.gpu > 0 ? ` (${server.status.gpu.toFixed(0)}%)` : ""}
+              </div>
+            </InfoCard>
+          )}
         </section>
       )}
 
@@ -1147,6 +1154,7 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
 /* ── Server Detail Summary (progress bars below header) ── */
 function ServerDetailSummary({ server }: { server: ServerInfo }) {
   const cpu = server.status.cpu
+  const gpu = server.status.gpu
   const mem = getMemPercent(server)
   const disk = getDiskPercent(server)
   const up = server.status.netOutSpeed / 1024 / 1024
@@ -1161,6 +1169,15 @@ function ServerDetailSummary({ server }: { server: ServerInfo }) {
         </section>
         <SummaryUsageBar value={cpu} />
       </section>
+      {server.host.gpu && server.host.gpu !== "None" && (
+        <section className="flex w-24 flex-col justify-center gap-1 px-1.5 py-1">
+          <section className="flex items-center justify-between">
+            <span className="text-[10px] text-muted-foreground">GPU</span>
+            <span className="font-medium text-[10px]">{gpu.toFixed(2)}%</span>
+          </section>
+          <SummaryUsageBar value={gpu} />
+        </section>
+      )}
       <section className="flex w-24 flex-col justify-center gap-1 px-1.5 py-1">
         <section className="flex items-center justify-between">
           <span className="text-[10px] text-muted-foreground">Mem</span>

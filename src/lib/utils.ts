@@ -52,19 +52,21 @@ export function formatDateTime(date: Date): string {
   return `${y}-${m}-${d} ${hh}:${mm}:${ss}`
 }
 
+function toPercentage(used: number, total: number): number {
+  if (!Number.isFinite(used) || !Number.isFinite(total) || total <= 0) return 0
+  return (used / total) * 100
+}
+
 export function getMemPercent(s: ServerInfo): number {
-  if (!s.host.memTotal) return 0
-  return (s.status.memUsed / s.host.memTotal) * 100
+  return toPercentage(s.status.memUsed, s.host.memTotal)
 }
 
 export function getDiskPercent(s: ServerInfo): number {
-  if (!s.host.diskTotal) return 0
-  return (s.status.diskUsed / s.host.diskTotal) * 100
+  return toPercentage(s.status.diskUsed, s.host.diskTotal)
 }
 
 export function getSwapPercent(s: ServerInfo): number {
-  if (!s.host.swapTotal) return 0
-  return (s.status.swapUsed / s.host.swapTotal) * 100
+  return toPercentage(s.status.swapUsed, s.host.swapTotal)
 }
 
 // Emoji flag to country code

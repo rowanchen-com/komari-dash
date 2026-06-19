@@ -19,6 +19,51 @@ const ServerDataContext = createContext<ServerDataContextType | undefined>(undef
 
 export const MAX_HISTORY_LENGTH = 30
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
+}
+
+function isRecentDataMap(value: unknown): value is Record<string, KomariRecentData> {
+  return isRecord(value)
+}
+
+function hasSameServerSnapshot(prev: ServerInfo, next: ServerInfo): boolean {
+  return prev.name === next.name &&
+    prev.online === next.online &&
+    prev.group === next.group &&
+    prev.tags === next.tags &&
+    prev.weight === next.weight &&
+    prev.region === next.region &&
+    prev.public_remark === next.public_remark &&
+    prev.version === next.version &&
+    prev.host.os === next.host.os &&
+    prev.host.kernel === next.host.kernel &&
+    prev.host.cpu === next.host.cpu &&
+    prev.host.gpu === next.host.gpu &&
+    prev.host.arch === next.host.arch &&
+    prev.host.virtualization === next.host.virtualization &&
+    prev.host.memTotal === next.host.memTotal &&
+    prev.host.swapTotal === next.host.swapTotal &&
+    prev.host.diskTotal === next.host.diskTotal &&
+    prev.status.cpu === next.status.cpu &&
+    prev.status.memUsed === next.status.memUsed &&
+    prev.status.swapUsed === next.status.swapUsed &&
+    prev.status.diskUsed === next.status.diskUsed &&
+    prev.status.netInSpeed === next.status.netInSpeed &&
+    prev.status.netOutSpeed === next.status.netOutSpeed &&
+    prev.status.netInTransfer === next.status.netInTransfer &&
+    prev.status.netOutTransfer === next.status.netOutTransfer &&
+    prev.status.uptime === next.status.uptime &&
+    prev.status.load1 === next.status.load1 &&
+    prev.status.load5 === next.status.load5 &&
+    prev.status.load15 === next.status.load15 &&
+    prev.status.tcpConn === next.status.tcpConn &&
+    prev.status.udpConn === next.status.udpConn &&
+    prev.status.process === next.status.process &&
+    prev.status.gpu === next.status.gpu &&
+    prev.updatedAt === next.updatedAt
+}
+
 export function ServerDataProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<ServerOverview | undefined>()
   const [error, setError] = useState<Error | undefined>()
@@ -37,9 +82,10 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
     onlineUuids: string[],
     wsData: Record<string, KomariRecentData>,
   ): ServerOverview => {
+    const visibleNodes = nodes.filter((node) => !node.hidden)
     const onlineSet = new Set(onlineUuids)
     const overview: ServerOverview = {
-      total: nodes.length,
+      total: visibleNodes.length,
       online: 0,
       offline: 0,
       totalInBandwidth: 0,
@@ -51,26 +97,14 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
 
     const newMap = new Map<string, ServerInfo>()
 
-    for (const node of nodes) {
-      if (node.hidden) continue
+    for (const node of visibleNodes) {
       const isOnline = onlineSet.has(node.uuid)
       const recent = wsData[node.uuid]
       const server = normalizeServer(node, recent, isOnline)
 
       // Reuse previous object if data is identical (prevents unnecessary re-renders)
       const prev = prevServersRef.current.get(node.uuid)
-      if (prev && prev.online === server.online &&
-          prev.status.cpu === server.status.cpu &&
-          prev.status.memUsed === server.status.memUsed &&
-          prev.status.diskUsed === server.status.diskUsed &&
-          prev.status.netInSpeed === server.status.netInSpeed &&
-          prev.status.netOutSpeed === server.status.netOutSpeed &&
-          prev.status.netInTransfer === server.status.netInTransfer &&
-          prev.status.netOutTransfer === server.status.netOutTransfer &&
-          prev.status.uptime === server.status.uptime &&
-          prev.status.tcpConn === server.status.tcpConn &&
-          prev.status.udpConn === server.status.udpConn &&
-          prev.status.process === server.status.process) {
+      if (prev && hasSameServerSnapshot(prev, server)) {
         overview.servers.push(prev)
         newMap.set(node.uuid, prev)
       } else {
@@ -160,10 +194,12 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
 
         ws.onmessage = (event) => {
           try {
-            const msg: KomariWsMessage = JSON.parse(event.data)
-            if (msg.status !== "success" || !msg.data) return
+            const msg: Partial<KomariWsMessage> = JSON.parse(event.data)
+            if (msg.status !== "success" || !isRecord(msg.data)) return
 
-            const overview = buildOverview(nodes, msg.data.online || [], msg.data.data || {})
+            const online = Array.isArray(msg.data.online) ? msg.data.online : []
+            const wsData = isRecentDataMap(msg.data.data) ? msg.data.data : {}
+            const overview = buildOverview(nodes, online, wsData)
             setData(overview)
             setHistory((prev) => {
               const newHistory = [
