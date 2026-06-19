@@ -90,7 +90,6 @@ export function normalizeServer(
       tcpConn: asNumber(recent?.connections?.tcp),
       udpConn: asNumber(recent?.connections?.udp),
       process: asNumber(recent?.process),
-      gpu: asNumber(recent?.gpu?.average_usage),
     },
     updatedAt: recent?.updated_at ?? "",
     version: node.version || "",

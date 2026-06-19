@@ -60,7 +60,6 @@ function hasSameServerSnapshot(prev: ServerInfo, next: ServerInfo): boolean {
     prev.status.tcpConn === next.status.tcpConn &&
     prev.status.udpConn === next.status.udpConn &&
     prev.status.process === next.status.process &&
-    prev.status.gpu === next.status.gpu &&
     prev.updatedAt === next.updatedAt
 }
 
