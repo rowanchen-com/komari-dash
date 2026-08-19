@@ -4,7 +4,7 @@
 
 一个现代化的服务器监控面板主题，适用于 [Komari](https://github.com/komari-monitor/komari)，移植自 [NezhaDash](https://github.com/hamster1963/nezha-dash)。
 
-3.1.13 版本基于 NezhaDash v3.1.12，并已针对 Komari 1.4.3 完成兼容验证。
+当前移植版本与 NezhaDash v3.1.12 对齐，并已针对 Komari 1.4.3 完成兼容验证。
 
 ![预览](preview.png)
 
