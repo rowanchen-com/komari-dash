@@ -8,7 +8,7 @@ A modern server monitoring dashboard theme for [Komari](https://github.com/komar
 
 ## Features
 
-- Real-time server monitoring with WebSocket
+- Real-time server monitoring with Komari RPC2
 - Interactive world map with server locations
 - Detailed server pages with CPU, Memory, Disk, Network, Connection, and Process charts
 - Network latency monitoring with ping charts and Peak Cut (EWMA smoothing)

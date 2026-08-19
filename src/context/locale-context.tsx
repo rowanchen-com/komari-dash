@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react"
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react"
 
 export const localeItems = [
   { code: "en", name: "English" },
@@ -159,18 +159,35 @@ const messages: Record<string, Record<string, Record<string, string>>> = {
 }
 
 function detectLang(): string {
-  const stored = localStorage.getItem("language") || localStorage.getItem("i18nextLng")
+  const stored = localStorage.getItem("language")
+  let language = stored || navigator.language
   if (stored) {
-    if (stored.startsWith("zh-TW") || stored.startsWith("zh-Hant")) return "zh-TW"
-    if (stored.startsWith("zh")) return "zh"
-    if (stored.startsWith("ja")) return "ja"
-    return "en"
+    try {
+      const parsed = JSON.parse(stored)
+      if (typeof parsed === "string") language = parsed
+    } catch {
+      // The official setting is normally stored as a plain string.
+    }
   }
-  const nav = navigator.language
-  if (nav.startsWith("zh-TW") || nav.startsWith("zh-Hant")) return "zh-TW"
-  if (nav.startsWith("zh")) return "zh"
-  if (nav.startsWith("ja")) return "ja"
+
+  const normalized = language.trim().replace(/_/g, "-").toLowerCase()
+  if (/^zh-(tw|hk|mo|hant)/.test(normalized)) return "zh-TW"
+  if (normalized.startsWith("zh")) return "zh"
+  if (normalized.startsWith("ja")) return "ja"
   return "en"
+}
+
+function writeLanguagePreference(language: string) {
+  const officialCode = {
+    en: "en-US",
+    ja: "ja-JP",
+    zh: "zh-CN",
+    "zh-TW": "zh-TW",
+  }[language] || "en-US"
+
+  localStorage.setItem("language", officialCode)
+  document.documentElement.lang = officialCode
+  document.cookie = `language=${encodeURIComponent(officialCode)}; path=/; max-age=31536000; SameSite=Lax`
 }
 
 function translate(lang: string, section: string, key: string): string {
@@ -189,10 +206,12 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState(detectLang)
 
   const setLocale = useCallback((lang: string) => {
-    localStorage.setItem("language", lang)
-    localStorage.setItem("i18nextLng", lang)
     setLocaleState(lang)
   }, [])
+
+  useEffect(() => {
+    writeLanguagePreference(locale)
+  }, [locale])
 
   const t = useCallback(
     (section: string, key: string) => translate(locale, section, key),

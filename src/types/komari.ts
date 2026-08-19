@@ -1,4 +1,4 @@
-// Komari API types
+// Komari 1.4.3 RPC2 contracts used by this theme.
 
 export interface KomariNode {
   uuid: string
@@ -16,97 +16,101 @@ export interface KomariNode {
   swap_total: number
   disk_total: number
   weight: number
-  price: number
-  billing_cycle: number
-  auto_renewal: boolean
-  currency: string
-  expired_at: string | null
   group: string
   tags: string
   hidden: boolean
-  traffic_limit: number
-  traffic_limit_type: string
   version: string
-  created_at: string
-  updated_at: string
 }
 
-export interface KomariRecentData {
-  cpu: { usage: number }
-  ram: { total: number; used: number }
-  swap: { total: number; used: number }
-  load: { load1: number; load5: number; load15: number }
-  disk: { total: number; used: number }
-  network: { up: number; down: number; totalUp: number; totalDown: number }
-  connections: { tcp: number; udp: number }
-  gpu?: {
-    count: number
-    average_usage: number
-    detailed_info: Array<{
-      name: string
-      memory_total: number
-      memory_used: number
-      utilization: number
-      temperature: number
-    }>
-  }
-  uptime: number
-  process: number
-  message: string
-  updated_at: string
-}
-
-export interface KomariPingRecord {
-  task_id: number
+export interface KomariLatestStatus {
+  client: string
   time: string
-  value: number
-}
-
-export interface KomariPingTask {
-  id: number
-  interval: number
-  name: string
-  loss: number
-}
-
-export interface KomariPingData {
-  count: number
-  records: KomariPingRecord[]
-  tasks: KomariPingTask[]
-}
-
-export interface KomariApiResponse<T> {
-  status: string
-  message: string
-  data: T
-}
-
-export interface KomariWsMessage {
-  status: string
-  data: {
-    online: string[]
-    data: Record<string, KomariRecentData>
-  }
+  cpu: number
+  ram: number
+  ram_total: number
+  swap: number
+  swap_total: number
+  load: number
+  load5: number
+  load15: number
+  disk: number
+  disk_total: number
+  net_in: number
+  net_out: number
+  net_total_up: number
+  net_total_down: number
+  process: number
+  connections: number
+  connections_udp: number
+  online: boolean
+  uptime: number
 }
 
 export interface KomariPublicInfo {
-  allow_cors: boolean
-  custom_body: string
-  custom_head: string
-  description: string
-  disable_password_login: boolean
-  oauth_enable: boolean
-  oauth_provider: string
-  ping_record_preserve_time: number
-  private_site: boolean
-  record_enabled: boolean
-  record_preserve_time: number
   sitename: string
-  theme: string
   theme_settings: Record<string, unknown> | null
 }
 
-// Normalized server data used by UI components
+export type MetricTags = Record<string, string>
+
+export interface MetricPoint {
+  time: string
+  value: number | null
+  tags?: MetricTags
+}
+
+export interface MetricSeries {
+  metric_key: string
+  entity_id: string
+  tags?: MetricTags
+  points: MetricPoint[]
+}
+
+export interface QueryMetricsResponse {
+  series: MetricSeries[]
+}
+
+export interface PublicPingTask {
+  id: number
+  weight: number
+  name: string
+  clients: string[]
+  default_on: boolean
+  interval: number
+}
+
+export interface PingMetricStat {
+  entity_id: string
+  task_id: string
+  name?: string
+  interval?: number
+  loss: number
+}
+
+export interface PingMetricStatsResponse {
+  stats: PingMetricStat[]
+}
+
+export interface PingChartPoint {
+  taskId: string
+  time: string
+  value: number | null
+}
+
+export interface PingChartTask {
+  id: string
+  weight: number
+  name: string
+  interval: number
+  loss: number
+}
+
+export interface PingChartData {
+  points: PingChartPoint[]
+  tasks: PingChartTask[]
+}
+
+// Normalized server data used by UI components.
 export interface ServerInfo {
   uuid: string
   name: string
@@ -131,7 +135,6 @@ export interface ServerInfo {
   }
   status: {
     cpu: number
-    gpu: number | null
     memUsed: number
     swapUsed: number
     diskUsed: number

@@ -10,11 +10,13 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.package.outputs.version }}
     steps:
       - uses: actions/checkout@v7
 
@@ -24,6 +26,7 @@ jobs:
           cache: npm
 
       - run: npm ci
+      - run: npm test
       - run: npm run build
       - run: node scripts/zip.mjs
 
@@ -32,18 +35,36 @@ jobs:
         shell: bash
         run: node -p '"version=" + require("./package.json").version' >> "$GITHUB_OUTPUT"
 
-      # 手动触发时：自动创建 Release + tag
-      - name: Create Release
+      - name: Upload theme package
+        uses: actions/upload-artifact@v7
+        with:
+          name: KomariDash
+          path: KomariDash.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download theme package
+        uses: actions/download-artifact@v8
+        with:
+          name: KomariDash
+
+      - name: Create or update release
         if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: v${{ steps.package.outputs.version }}
-          name: v${{ steps.package.outputs.version }}
+          tag_name: v${{ needs.build.outputs.version }}
+          name: v${{ needs.build.outputs.version }}
           files: KomariDash.zip
           generate_release_notes: true
 
-      # Release 触发时：附加到已有 Release
-      - name: Upload to existing Release
+      - name: Upload to published release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v3
         with:

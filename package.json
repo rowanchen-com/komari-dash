@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
+    "test": "vitest run",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "zip": "npm run build && node scripts/zip.mjs"
@@ -47,7 +48,8 @@
     "archiver": "^8.0.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
-    "vite": "^8.2.1"
+    "vite": "^8.2.1",
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "rolldown": "1.2.4"

@@ -15,8 +15,8 @@ import { SwitchUI } from "@/components/ui/switch-ui"
 import { Progress } from "@/components/ui/progress"
 import { cn, formatBytes, formatUptime, formatRelativeTime, formatDateTime, getMemPercent, getDiskPercent, getSwapPercent, isEmojiFlag, getCountryCode } from "@/lib/utils"
 import { useLocale } from "@/context/locale-context"
-import type { ServerInfo, KomariPingTask } from "@/types/komari"
-import { fetchPingRecords } from "@/lib/api"
+import type { PingChartTask, ServerInfo } from "@/types/komari"
+import { fetchPingChartData } from "@/lib/komari-rpc"
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ComposedChart, XAxis, YAxis } from "recharts"
 
 countries.registerLocale(enLocale)
@@ -121,10 +121,7 @@ export default function ServerDetailPage() {
           {server.host.cpu && <InfoCard label={t("ServerDetail", "CPU")}><div className="text-xs">{server.host.cpu}</div></InfoCard>}
           {server.host.gpu && server.host.gpu !== "None" && (
             <InfoCard label="GPU">
-              <div className="text-xs">
-                {server.host.gpu}
-                {server.status.gpu !== null && ` · ${server.status.gpu.toFixed(2)}%`}
-              </div>
+              <div className="text-xs">{server.host.gpu}</div>
             </InfoCard>
           )}
         </section>
@@ -765,20 +762,28 @@ class NetworkPingErrorBoundary extends Component<{ children: ReactNode }, { hasE
 /* ── Network Ping Charts ── */
 interface PingChartData {
   created_at: number
-  [key: string]: number
+  [key: string]: number | null
 }
+
+interface PingTaskChartPoint extends PingChartData {
+  avg_delay: number | null
+  packet_loss: number
+}
+
+const pingDataKey = (taskId: string) => `ping_${taskId}`
 
 function NetworkPingCharts({ uuid }: { uuid: string }) {
   const { t } = useLocale()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [tasks, setTasks] = useState<KomariPingTask[]>([])
-  const [chartData, setChartData] = useState<Record<string, { created_at: number; avg_delay: number; packet_loss: number }[]>>({})
+  const [tasks, setTasks] = useState<PingChartTask[]>([])
+  const [chartData, setChartData] = useState<Record<string, PingTaskChartPoint[]>>({})
   const [formattedData, setFormattedData] = useState<PingChartData[]>([])
   const [activeChart, setActiveChart] = useState<string>("All")
   const [isPeakEnabled, setIsPeakEnabled] = useState(false)
 
-  const taskNames = useMemo(() => Object.keys(chartData), [chartData])
+  const taskIds = useMemo(() => tasks.map((task) => task.id), [tasks])
+  const taskMap = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks])
   const getColor = useCallback((idx: number) => `hsl(var(--chart-${(idx % 10) + 1}))`, [])
 
   const chartConfig = useMemo(() => {
@@ -786,42 +791,47 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
       avg_delay: { label: t("ServerDetail", "avgDelay"), color: "hsl(var(--chart-1))" },
       packet_loss: { label: t("ServerDetail", "packetLoss"), color: "hsl(45, 100%, 60%)" },
     }
-    taskNames.forEach((name, idx) => {
-      cfg[name] = { label: name, color: `hsl(var(--chart-${(idx % 10) + 1}))` }
+    taskIds.forEach((taskId, idx) => {
+      const key = pingDataKey(taskId)
+      cfg[key] = { label: taskMap.get(taskId)?.name || taskId, color: `hsl(var(--chart-${(idx % 10) + 1}))` }
     })
     return cfg
-  }, [taskNames, t])
+  }, [taskIds, taskMap, t])
 
   useEffect(() => {
     let cancelled = false
+    const controller = new AbortController()
+    setActiveChart("All")
     const load = async () => {
       try {
         setLoading(true)
-        const data = await fetchPingRecords(uuid, 48)
+        setError(null)
+        const data = await fetchPingChartData(uuid, 48, controller.signal)
         if (cancelled) return
 
-        if (!data.tasks || data.tasks.length === 0) {
+        if (data.tasks.length === 0) {
+          setTasks([])
+          setChartData({})
+          setFormattedData([])
           setError("no_data")
           setLoading(false)
           return
         }
 
         setTasks(data.tasks)
-
-        // Group records by task
-        const byTask: Record<string, { created_at: number; avg_delay: number; packet_loss: number }[]> = {}
-        const taskMap = new Map(data.tasks.map((tk) => [tk.id, tk]))
+        const byTask: Record<string, PingTaskChartPoint[]> = {}
+        const loadedTaskMap = new Map(data.tasks.map((task) => [task.id, task]))
 
         for (const task of data.tasks) {
-          byTask[task.name] = []
+          byTask[task.id] = []
         }
 
-        for (const rec of data.records) {
-          const task = taskMap.get(rec.task_id)
+        for (const point of data.points) {
+          const task = loadedTaskMap.get(point.taskId)
           if (!task) continue
-          byTask[task.name].push({
-            created_at: new Date(rec.time).getTime(),
-            avg_delay: rec.value,
+          byTask[task.id].push({
+            created_at: new Date(point.time).getTime(),
+            avg_delay: point.value,
             packet_loss: task.loss,
           })
         }
@@ -841,9 +851,9 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
         const sortedTimes = Array.from(allTimes).sort((a, b) => a - b)
         const merged: PingChartData[] = sortedTimes.map((time) => {
           const point: PingChartData = { created_at: time }
-          for (const [name, records] of Object.entries(byTask)) {
+          for (const [taskId, records] of Object.entries(byTask)) {
             const rec = records.find((r) => r.created_at === time)
-            point[name] = rec ? rec.avg_delay : 0
+            point[pingDataKey(taskId)] = rec?.avg_delay ?? null
           }
           return point
         })
@@ -856,8 +866,11 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
         }
       }
     }
-    load()
-    return () => { cancelled = true }
+    void load()
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
   }, [uuid])
 
   const rawDisplayData = activeChart === "All" ? formattedData : (chartData[activeChart] || [])
@@ -900,7 +913,8 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
       const smoothed = { ...point } as PingChartData
 
       if (activeChart === "All") {
-        for (const key of taskNames) {
+        for (const taskId of taskIds) {
+          const key = pingDataKey(taskId)
           const values = window
             .map((w) => w[key])
             .filter((v) => v !== undefined && v !== null) as number[]
@@ -934,7 +948,7 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
       }
       return smoothed
     })
-  }, [isPeakEnabled, activeChart, rawDisplayData, taskNames])
+  }, [isPeakEnabled, activeChart, rawDisplayData, taskIds])
 
   if (loading) {
     return (
@@ -970,7 +984,7 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
           </CardTitle>
           <div className="flex items-center justify-between">
             <CardDescription className="mr-2 text-xs">
-              {taskNames.length} {t("ServerDetail", "monitorCount")}
+              {taskIds.length} {t("ServerDetail", "monitorCount")}
             </CardDescription>
             <div className="flex items-center space-x-2">
               <SwitchUI checked={isPeakEnabled} onCheckedChange={setIsPeakEnabled} />
@@ -981,21 +995,24 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
           </div>
         </div>
         <div className="flex w-full flex-wrap">
-          {taskNames.map((name) => {
-            const data = chartData[name]
-            const lastDelay = data.length > 0 ? data[data.length - 1].avg_delay : 0
-            const delays = data.map((d) => d.avg_delay)
+          {taskIds.map((taskId) => {
+            const task = taskMap.get(taskId)
+            const data = chartData[taskId] || []
+            const delays = data
+              .map((item) => item.avg_delay)
+              .filter((value): value is number => typeof value === "number")
+            const lastDelay = delays[delays.length - 1] ?? 0
             const minDelay = delays.length > 0 ? Math.min(...delays) : 0
             const maxDelay = delays.length > 0 ? Math.max(...delays) : 0
             return (
               <button
                 type="button"
-                key={name}
-                data-active={activeChart === name}
+                key={taskId}
+                data-active={activeChart === taskId}
                 className="relative z-30 flex grow basis-0 cursor-pointer flex-col justify-center gap-1 border-neutral-200 border-b px-6 py-4 text-left data-[active=true]:bg-muted/50 sm:border-t-0 sm:border-l sm:px-6 dark:border-neutral-800"
-                onClick={() => setActiveChart((prev) => prev === name ? "All" : name)}
+                onClick={() => setActiveChart((prev) => prev === taskId ? "All" : taskId)}
               >
-                <span className="whitespace-nowrap text-muted-foreground text-xs">{name}</span>
+                <span className="whitespace-nowrap text-muted-foreground text-xs">{task?.name || taskId}</span>
                 <div className="flex flex-col gap-0.5">
                   <span className="font-bold text-md leading-none sm:text-lg">
                     {lastDelay.toFixed(2)}ms
@@ -1090,7 +1107,8 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
                       label = t("ServerDetail", "avgDelay")
                     } else {
                       formattedValue = `${Number(value).toFixed(2)}ms`
-                      label = name as string
+                      const taskId = String(name).replace(/^ping_/, "")
+                      label = taskMap.get(taskId)?.name || String(name)
                     }
                     return (
                       <div className="flex flex-1 items-center justify-between leading-none">
@@ -1126,19 +1144,19 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
                 type="linear"
                 dot={false}
                 dataKey="avg_delay"
-                stroke={getColor(taskNames.indexOf(activeChart))}
+                stroke={getColor(taskIds.indexOf(activeChart))}
                 yAxisId="delay"
               />
             )}
             {activeChart === "All" &&
-              taskNames.map((name, idx) => (
+              taskIds.map((taskId, idx) => (
                 <Line
-                  key={name}
+                  key={taskId}
                   isAnimationActive={false}
                   strokeWidth={1}
                   type="linear"
                   dot={false}
-                  dataKey={name}
+                  dataKey={pingDataKey(taskId)}
                   stroke={getColor(idx)}
                   connectNulls={true}
                   yAxisId="delay"
@@ -1168,15 +1186,6 @@ function ServerDetailSummary({ server }: { server: ServerInfo }) {
         </section>
         <SummaryUsageBar value={cpu} />
       </section>
-      {server.status.gpu !== null && (
-        <section className="flex w-24 flex-col justify-center gap-1 px-1.5 py-1">
-          <section className="flex items-center justify-between">
-            <span className="text-[10px] text-muted-foreground">GPU</span>
-            <span className="font-medium text-[10px]">{server.status.gpu.toFixed(2)}%</span>
-          </section>
-          <SummaryUsageBar value={server.status.gpu} />
-        </section>
-      )}
       <section className="flex w-24 flex-col justify-center gap-1 px-1.5 py-1">
         <section className="flex items-center justify-between">
           <span className="text-[10px] text-muted-foreground">Mem</span>
