@@ -159,7 +159,7 @@ const messages: Record<string, Record<string, Record<string, string>>> = {
 }
 
 function detectLang(): string {
-  const stored = localStorage.getItem("i18nextLng")
+  const stored = localStorage.getItem("language") || localStorage.getItem("i18nextLng")
   if (stored) {
     if (stored.startsWith("zh-TW") || stored.startsWith("zh-Hant")) return "zh-TW"
     if (stored.startsWith("zh")) return "zh"
@@ -189,6 +189,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState(detectLang)
 
   const setLocale = useCallback((lang: string) => {
+    localStorage.setItem("language", lang)
     localStorage.setItem("i18nextLng", lang)
     setLocaleState(lang)
   }, [])

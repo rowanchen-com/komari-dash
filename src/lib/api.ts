@@ -47,6 +47,10 @@ function asNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0
 }
 
+function asOptionalNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null
+}
+
 export function normalizeServer(
   node: KomariNode,
   recent?: KomariRecentData,
@@ -76,6 +80,7 @@ export function normalizeServer(
     },
     status: {
       cpu: asNumber(recent?.cpu?.usage),
+      gpu: asOptionalNumber(recent?.gpu?.average_usage),
       memUsed: asNumber(recent?.ram?.used),
       swapUsed: asNumber(recent?.swap?.used),
       diskUsed: asNumber(recent?.disk?.used),

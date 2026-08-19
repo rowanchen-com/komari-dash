@@ -119,7 +119,14 @@ export default function ServerDetailPage() {
         <section className="mt-1 flex flex-wrap gap-2">
           <InfoCard label={t("ServerDetail", "System")}><div className="text-xs">{server.host.os}</div></InfoCard>
           {server.host.cpu && <InfoCard label={t("ServerDetail", "CPU")}><div className="text-xs">{server.host.cpu}</div></InfoCard>}
-          {server.host.gpu && server.host.gpu !== "None" && <InfoCard label="GPU"><div className="text-xs">{server.host.gpu}</div></InfoCard>}
+          {server.host.gpu && server.host.gpu !== "None" && (
+            <InfoCard label="GPU">
+              <div className="text-xs">
+                {server.host.gpu}
+                {server.status.gpu !== null && ` · ${server.status.gpu.toFixed(2)}%`}
+              </div>
+            </InfoCard>
+          )}
         </section>
       )}
 
@@ -1161,6 +1168,15 @@ function ServerDetailSummary({ server }: { server: ServerInfo }) {
         </section>
         <SummaryUsageBar value={cpu} />
       </section>
+      {server.status.gpu !== null && (
+        <section className="flex w-24 flex-col justify-center gap-1 px-1.5 py-1">
+          <section className="flex items-center justify-between">
+            <span className="text-[10px] text-muted-foreground">GPU</span>
+            <span className="font-medium text-[10px]">{server.status.gpu.toFixed(2)}%</span>
+          </section>
+          <SummaryUsageBar value={server.status.gpu} />
+        </section>
+      )}
       <section className="flex w-24 flex-col justify-center gap-1 px-1.5 py-1">
         <section className="flex items-center justify-between">
           <span className="text-[10px] text-muted-foreground">Mem</span>

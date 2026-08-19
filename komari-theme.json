@@ -2,9 +2,9 @@
   "name": "Komari Dash",
   "short": "KomariDash",
   "description": "A beautiful server monitoring dashboard theme for Komari, ported from NezhaDash",
-  "version": "3.1.12",
-  "author": "hamster1963",
-  "url": "https://github.com/hamster1963/nezha-dash",
+  "version": "3.1.13",
+  "author": "rowanchen-com",
+  "url": "https://github.com/rowanchen-com/komari-dash",
   "preview": "preview.png",
   "configuration": {
     "type": "managed",

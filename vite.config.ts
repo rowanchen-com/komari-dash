@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
   build: {
@@ -15,10 +15,19 @@ export default defineConfig({
     assetsDir: "assets",
     rollupOptions: {
       output: {
-        manualChunks: {
-          react: ["react", "react-dom", "react-router-dom"],
-          recharts: ["recharts"],
-          "d3-geo": ["d3-geo"],
+        manualChunks(id) {
+          const isReactPackage = ["react", "react-dom", "react-router-dom"].some((name) =>
+            id.includes(`/node_modules/${name}/`),
+          )
+          if (isReactPackage) {
+            return "react"
+          }
+          if (id.includes("/node_modules/recharts/")) {
+            return "recharts"
+          }
+          if (id.includes("/node_modules/d3-geo/")) {
+            return "d3-geo"
+          }
         },
       },
     },

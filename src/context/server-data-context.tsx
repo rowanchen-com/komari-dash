@@ -46,6 +46,7 @@ function hasSameServerSnapshot(prev: ServerInfo, next: ServerInfo): boolean {
     prev.host.swapTotal === next.host.swapTotal &&
     prev.host.diskTotal === next.host.diskTotal &&
     prev.status.cpu === next.status.cpu &&
+    prev.status.gpu === next.status.gpu &&
     prev.status.memUsed === next.status.memUsed &&
     prev.status.swapUsed === next.status.swapUsed &&
     prev.status.diskUsed === next.status.diskUsed &&

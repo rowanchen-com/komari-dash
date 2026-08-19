@@ -39,6 +39,17 @@ export interface KomariRecentData {
   disk: { total: number; used: number }
   network: { up: number; down: number; totalUp: number; totalDown: number }
   connections: { tcp: number; udp: number }
+  gpu?: {
+    count: number
+    average_usage: number
+    detailed_info: Array<{
+      name: string
+      memory_total: number
+      memory_used: number
+      utilization: number
+      temperature: number
+    }>
+  }
   uptime: number
   process: number
   message: string
@@ -120,6 +131,7 @@ export interface ServerInfo {
   }
   status: {
     cpu: number
+    gpu: number | null
     memUsed: number
     swapUsed: number
     diskUsed: number

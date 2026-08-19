@@ -4,6 +4,8 @@
 
 A modern server monitoring dashboard theme for [Komari](https://github.com/komari-monitor/komari), ported from [NezhaDash](https://github.com/hamster1963/nezha-dash).
 
+Version 3.1.13 is based on NezhaDash v3.1.12 and tested against Komari 1.4.3.
+
 ![Preview](preview.png)
 
 ## Features
