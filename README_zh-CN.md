@@ -15,7 +15,7 @@
 - 详细的服务器页面，包含 CPU、内存、磁盘、网络、连接数、进程图表
 - 网络延迟监控，支持 Ping 图表和 Peak Cut（EWMA 平滑）
 - 深色 / 浅色主题切换
-- 多语言支持（English、简体中文、繁體中文、日本語、Español、Deutsch、Français）
+- 多语言支持（English、简体中文、繁體中文、日本語）
 - 搜索命令面板
 - 响应式设计，适配移动端和桌面端
 - OS Logo 图标（font-logos）

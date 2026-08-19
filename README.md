@@ -15,7 +15,7 @@ This port tracks NezhaDash v3.1.12 and is tested against Komari 1.4.3.
 - Detailed server pages with CPU, Memory, Disk, Network, Connection, and Process charts
 - Network latency monitoring with ping charts and Peak Cut (EWMA smoothing)
 - Dark / Light theme switching
-- Multi-language support (English, 简体中文, 繁體中文, 日本語, Español, Deutsch, Français)
+- Multi-language support (English, 简体中文, 繁體中文, 日本語)
 - Search command palette
 - Responsive design for mobile and desktop
 - OS logo icons (font-logos)
