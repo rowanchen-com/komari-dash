@@ -21,6 +21,13 @@ export function formatSpeed(bytesPerSec: number): string {
   return `${mbps.toFixed(2)} M/s`
 }
 
+export function formatPreciseSpeed(bytesPerSec: number): string {
+  const mbps = bytesPerSec / 1024 / 1024
+  if (mbps >= 1024) return `${(mbps / 1024).toFixed(2)} G/s`
+  const decimals = mbps > 0 && mbps < 0.01 ? 4 : 2
+  return `${mbps.toFixed(decimals)} M/s`
+}
+
 export function formatUptime(seconds: number, t?: (section: string, key: string) => string): string {
   const days = Math.floor(seconds / 86400)
   const hours = Math.floor((seconds % 86400) / 3600)

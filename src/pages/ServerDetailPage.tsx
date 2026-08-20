@@ -13,7 +13,7 @@ import AnimatedCircularProgressBar from "@/components/ui/animated-circular-progr
 import { Label } from "@/components/ui/label"
 import { SwitchUI } from "@/components/ui/switch-ui"
 import { Progress } from "@/components/ui/progress"
-import { cn, formatBytes, formatUptime, formatRelativeTime, formatDateTime, getMemPercent, getDiskPercent, getSwapPercent, isEmojiFlag, getCountryCode } from "@/lib/utils"
+import { cn, formatBytes, formatPreciseSpeed, formatUptime, formatRelativeTime, formatDateTime, getMemPercent, getDiskPercent, getSwapPercent, isEmojiFlag, getCountryCode } from "@/lib/utils"
 import { useLocale } from "@/context/locale-context"
 import type { PingChartTask, ServerInfo } from "@/types/komari"
 import { fetchPingChartData } from "@/lib/komari-rpc"
@@ -450,6 +450,11 @@ function DiskChart({ uuid, history, server }: { uuid: string; history: ServerDat
 }
 
 /* ── Network Chart ── */
+function formatChartSpeed(mebibytesPerSec: number): string {
+  if (mebibytesPerSec === 0) return "0M/s"
+  return formatPreciseSpeed(mebibytesPerSec * 1024 * 1024).replace(" ", "")
+}
+
 function NetworkRealtimeChart({ uuid, history }: { uuid: string; history: ServerDataWithTimestamp[] }) {
   const { t } = useLocale()
   const [chartData, setChartData] = useState<{ ts: string; upload: number; download: number }[]>([])
@@ -489,9 +494,6 @@ function NetworkRealtimeChart({ uuid, history }: { uuid: string; history: Server
   }, [history[0]?.timestamp])
 
   const current = chartData.length > 0 ? chartData[chartData.length - 1] : { upload: 0, download: 0 }
-  let maxDownload = Math.max(...chartData.map((d) => d.download), 1)
-  maxDownload = Math.ceil(maxDownload)
-
   const chartConfig = { upload: { label: "Upload" }, download: { label: "Download" } } satisfies ChartConfig
 
   return (
@@ -504,14 +506,14 @@ function NetworkRealtimeChart({ uuid, history }: { uuid: string; history: Server
                 <p className="text-muted-foreground text-xs">{t("ServerDetail", "Upload")}</p>
                 <div className="flex items-center gap-1">
                   <span className="relative inline-flex size-1.5 rounded-full bg-[hsl(var(--chart-1))]" />
-                  <p className="font-medium text-xs">{current.upload.toFixed(2)} M/s</p>
+                  <p className="font-medium text-xs">{formatPreciseSpeed(current.upload * 1024 * 1024)}</p>
                 </div>
               </div>
               <div className="flex w-20 flex-col">
                 <p className="text-muted-foreground text-xs">{t("ServerDetail", "Download")}</p>
                 <div className="flex items-center gap-1">
                   <span className="relative inline-flex size-1.5 rounded-full bg-[hsl(var(--chart-4))]" />
-                  <p className="font-medium text-xs">{current.download.toFixed(2)} M/s</p>
+                  <p className="font-medium text-xs">{formatPreciseSpeed(current.download * 1024 * 1024)}</p>
                 </div>
               </div>
             </section>
@@ -520,7 +522,7 @@ function NetworkRealtimeChart({ uuid, history }: { uuid: string; history: Server
             <LineChart accessibilityLayer data={chartData} margin={{ top: 12, left: 12, right: 12 }}>
               <CartesianGrid vertical={false} />
               <XAxis dataKey="ts" tickLine={false} axisLine={false} tickMargin={8} minTickGap={200} interval="preserveStartEnd" tickFormatter={(v) => formatRelativeTime(Number(v))} />
-              <YAxis tickLine={false} axisLine={false} mirror tickMargin={-15} type="number" minTickGap={50} interval="preserveStartEnd" domain={[1, maxDownload]} tickFormatter={(v) => `${v.toFixed(0)}M/s`} />
+              <YAxis tickLine={false} axisLine={false} mirror tickMargin={-15} type="number" minTickGap={50} interval="preserveStartEnd" domain={[0, "auto"]} tickFormatter={(v) => formatChartSpeed(Number(v))} />
               <Line isAnimationActive={false} dataKey="upload" type="linear" stroke="hsl(var(--chart-1))" strokeWidth={1} dot={false} />
               <Line isAnimationActive={false} dataKey="download" type="linear" stroke="hsl(var(--chart-4))" strokeWidth={1} dot={false} />
             </LineChart>
@@ -599,6 +601,7 @@ function ConnRealtimeChart({ uuid, history }: { uuid: string; history: ServerDat
             <LineChart accessibilityLayer data={chartData} margin={{ top: 12, left: 12, right: 12 }}>
               <CartesianGrid vertical={false} />
               <XAxis dataKey="ts" tickLine={false} axisLine={false} tickMargin={8} minTickGap={200} interval="preserveStartEnd" tickFormatter={(v) => formatRelativeTime(Number(v))} />
+              <YAxis tickLine={false} axisLine={false} mirror tickMargin={-15} type="number" interval="preserveStartEnd" />
               <Line isAnimationActive={false} dataKey="tcp" type="linear" stroke="hsl(var(--chart-1))" strokeWidth={1} dot={false} />
               <Line isAnimationActive={false} dataKey="udp" type="linear" stroke="hsl(var(--chart-4))" strokeWidth={1} dot={false} />
             </LineChart>
@@ -1174,8 +1177,6 @@ function ServerDetailSummary({ server }: { server: ServerInfo }) {
   const cpu = server.status.cpu
   const mem = getMemPercent(server)
   const disk = getDiskPercent(server)
-  const up = server.status.netOutSpeed / 1024 / 1024
-  const down = server.status.netInSpeed / 1024 / 1024
 
   return (
     <div className="mb-2 flex flex-wrap items-center gap-4">
@@ -1219,11 +1220,11 @@ function ServerDetailSummary({ server }: { server: ServerInfo }) {
       <section className="flex min-w-[120px] flex-col justify-center gap-0.5 px-1.5 py-1">
         <section className="flex items-center justify-between gap-4">
           <span className="text-[10px] text-muted-foreground">Upload</span>
-          <span className="font-medium text-[10px]">{up.toFixed(2)}M/s</span>
+          <span className="font-medium text-[10px]">{formatPreciseSpeed(server.status.netOutSpeed).replace(" ", "")}</span>
         </section>
         <section className="flex items-center justify-between gap-4">
           <span className="text-[10px] text-muted-foreground">Download</span>
-          <span className="font-medium text-[10px]">{down.toFixed(2)}M/s</span>
+          <span className="font-medium text-[10px]">{formatPreciseSpeed(server.status.netInSpeed).replace(" ", "")}</span>
         </section>
       </section>
     </div>
