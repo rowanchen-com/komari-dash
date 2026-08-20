@@ -16,16 +16,12 @@ export function formatBytes(bytes: number, decimals = 2) {
 }
 
 export function formatSpeed(bytesPerSec: number): string {
-  const mbps = bytesPerSec / 1024 / 1024
-  if (mbps >= 1024) return `${(mbps / 1024).toFixed(2)} G/s`
-  return `${mbps.toFixed(2)} M/s`
-}
-
-export function formatPreciseSpeed(bytesPerSec: number): string {
-  const mbps = bytesPerSec / 1024 / 1024
-  if (mbps >= 1024) return `${(mbps / 1024).toFixed(2)} G/s`
-  const decimals = mbps > 0 && mbps < 0.01 ? 4 : 2
-  return `${mbps.toFixed(decimals)} M/s`
+  const value = Number.isFinite(bytesPerSec) ? Math.max(0, bytesPerSec) : 0
+  const format = (speed: number, unit: string) => `${Number.parseFloat(speed.toFixed(2))} ${unit}/s`
+  if (value >= 1024 ** 3) return format(value / 1024 ** 3, "G")
+  if (value >= 0.01 * 1024 ** 2) return format(value / 1024 ** 2, "M")
+  if (value >= 0.01 * 1024) return format(value / 1024, "K")
+  return format(value, "B")
 }
 
 export function formatUptime(seconds: number, t?: (section: string, key: string) => string): string {

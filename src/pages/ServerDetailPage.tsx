@@ -13,7 +13,7 @@ import AnimatedCircularProgressBar from "@/components/ui/animated-circular-progr
 import { Label } from "@/components/ui/label"
 import { SwitchUI } from "@/components/ui/switch-ui"
 import { Progress } from "@/components/ui/progress"
-import { cn, formatBytes, formatPreciseSpeed, formatUptime, formatRelativeTime, formatDateTime, getMemPercent, getDiskPercent, getSwapPercent, isEmojiFlag, getCountryCode } from "@/lib/utils"
+import { cn, formatBytes, formatSpeed, formatUptime, formatRelativeTime, formatDateTime, getMemPercent, getDiskPercent, getSwapPercent, isEmojiFlag, getCountryCode } from "@/lib/utils"
 import { useLocale } from "@/context/locale-context"
 import type { PingChartTask, ServerInfo } from "@/types/komari"
 import { fetchPingChartData } from "@/lib/komari-rpc"
@@ -451,8 +451,7 @@ function DiskChart({ uuid, history, server }: { uuid: string; history: ServerDat
 
 /* ── Network Chart ── */
 function formatChartSpeed(mebibytesPerSec: number): string {
-  if (mebibytesPerSec === 0) return "0M/s"
-  return formatPreciseSpeed(mebibytesPerSec * 1024 * 1024).replace(" ", "")
+  return formatSpeed(mebibytesPerSec * 1024 * 1024).replace(" ", "")
 }
 
 function NetworkRealtimeChart({ uuid, history }: { uuid: string; history: ServerDataWithTimestamp[] }) {
@@ -506,14 +505,14 @@ function NetworkRealtimeChart({ uuid, history }: { uuid: string; history: Server
                 <p className="text-muted-foreground text-xs">{t("ServerDetail", "Upload")}</p>
                 <div className="flex items-center gap-1">
                   <span className="relative inline-flex size-1.5 rounded-full bg-[hsl(var(--chart-1))]" />
-                  <p className="font-medium text-xs">{formatPreciseSpeed(current.upload * 1024 * 1024)}</p>
+                  <p className="font-medium text-xs">{formatSpeed(current.upload * 1024 * 1024)}</p>
                 </div>
               </div>
               <div className="flex w-20 flex-col">
                 <p className="text-muted-foreground text-xs">{t("ServerDetail", "Download")}</p>
                 <div className="flex items-center gap-1">
                   <span className="relative inline-flex size-1.5 rounded-full bg-[hsl(var(--chart-4))]" />
-                  <p className="font-medium text-xs">{formatPreciseSpeed(current.download * 1024 * 1024)}</p>
+                  <p className="font-medium text-xs">{formatSpeed(current.download * 1024 * 1024)}</p>
                 </div>
               </div>
             </section>
@@ -1220,11 +1219,11 @@ function ServerDetailSummary({ server }: { server: ServerInfo }) {
       <section className="flex min-w-[120px] flex-col justify-center gap-0.5 px-1.5 py-1">
         <section className="flex items-center justify-between gap-4">
           <span className="text-[10px] text-muted-foreground">Upload</span>
-          <span className="font-medium text-[10px]">{formatPreciseSpeed(server.status.netOutSpeed).replace(" ", "")}</span>
+          <span className="font-medium text-[10px]">{formatSpeed(server.status.netOutSpeed).replace(" ", "")}</span>
         </section>
         <section className="flex items-center justify-between gap-4">
           <span className="text-[10px] text-muted-foreground">Download</span>
-          <span className="font-medium text-[10px]">{formatPreciseSpeed(server.status.netInSpeed).replace(" ", "")}</span>
+          <span className="font-medium text-[10px]">{formatSpeed(server.status.netInSpeed).replace(" ", "")}</span>
         </section>
       </section>
     </div>
