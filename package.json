@@ -32,10 +32,10 @@
     "flag-icons": "^7.5.0",
     "font-logos": "^1.4.0",
     "i18n-iso-countries": "^7.14.0",
-    "lucide-react": "^1.33.0",
+    "lucide-react": "^1.37.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.2",
+    "react-router-dom": "^7.18.3",
     "recharts": "^3.10.1",
     "swr": "^2.5.1",
     "tailwind-merge": "^3.6.0"
@@ -43,12 +43,12 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
-    "@vitejs/plugin-react": "^6.0.5",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.1",
     "archiver": "^8.0.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
-    "vite": "^8.2.1",
+    "vite": "^8.2.2",
     "vitest": "^4.1.11"
   },
   "overrides": {
