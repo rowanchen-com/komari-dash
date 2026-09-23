@@ -44,7 +44,7 @@ export default memo(function ServerCardInline({ server }: { server: ServerInfo }
 
   return (
     <Link to={`/server/${server.uuid}`} onClick={saveSession}>
-      <Card className="flex w-full min-w-[900px] cursor-pointer items-center justify-start gap-3 p-3 transition-all hover:shadow-sm hover:ring-stone-300 md:px-5 lg:flex-row dark:hover:ring-stone-700">
+      <Card className="flex min-h-[61px] w-full min-w-[900px] cursor-pointer items-center justify-start gap-3 p-3 transition-all hover:shadow-sm hover:ring-stone-300 md:px-5 lg:flex-row dark:hover:ring-stone-700">
         <section className={cn("grid items-center gap-2 lg:w-36")} style={{ gridTemplateColumns: "auto auto 1fr" }}>
           <span className="h-2 w-2 shrink-0 self-center rounded-full bg-green-500" />
           <div className={cn("flex items-center justify-center", showFlag ? "min-w-[17px]" : "min-w-0")}>
@@ -95,11 +95,11 @@ export default memo(function ServerCardInline({ server }: { server: ServerInfo }
             </div>
             <div className="flex w-16 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "Upload")}</p>
-              <div className="flex items-center font-semibold text-xs">{formatSpeed(server.status.netOutSpeed)}</div>
+              <div className="min-w-0 font-semibold text-[11px] leading-tight">{formatSpeed(server.status.netOutSpeed)}</div>
             </div>
             <div className="flex w-16 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "Download")}</p>
-              <div className="flex items-center font-semibold text-xs">{formatSpeed(server.status.netInSpeed)}</div>
+              <div className="min-w-0 font-semibold text-[11px] leading-tight">{formatSpeed(server.status.netInSpeed)}</div>
             </div>
             <div className="flex w-20 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "TotalUpload")}</p>

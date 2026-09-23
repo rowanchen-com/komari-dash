@@ -180,15 +180,6 @@ export async function fetchPublicInfo(signal?: AbortSignal): Promise<KomariPubli
   }
 }
 
-export async function fetchVersion(signal?: AbortSignal): Promise<string> {
-  try {
-    const result = await rpcCall<undefined, unknown>("common:getVersion", undefined, { signal })
-    return isRecord(result) ? asString(result.version) : ""
-  } catch {
-    return ""
-  }
-}
-
 function pointTaskId(series: MetricSeries, point: MetricSeries["points"][number]): string {
   return point.tags?.task_id?.trim() || series.tags?.task_id?.trim() || ""
 }

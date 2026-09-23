@@ -1,4 +1,4 @@
-// Komari 1.4.3 RPC2 contracts used by this theme.
+// Komari 1.5.0 RPC2 contracts used by this theme.
 
 export interface KomariNode {
   uuid: string

@@ -22,11 +22,11 @@ const nodeResponse = {
     group: "Asia",
     tags: "edge",
     hidden: false,
-    version: "1.4.3",
+    version: "agent-1.5.0",
   },
 }
 
-describe("Komari 1.4.3 RPC2 adapters", () => {
+describe("Komari 1.5.0 RPC2 adapters", () => {
   it("normalizes common:getNodes and common:getNodesLatestStatus", () => {
     const [node] = normalizeNodes(nodeResponse)
     const statuses = normalizeLatestStatuses({
@@ -62,6 +62,7 @@ describe("Komari 1.4.3 RPC2 adapters", () => {
     expect(server.online).toBe(true)
     expect(server.host.memTotal).toBe(2048)
     expect(server.host.gpu).toBe("Example GPU")
+    expect(server.version).toBe("agent-1.5.0")
     expect(server.status.tcpConn).toBe(15)
     expect(server.status.udpConn).toBe(3)
     expect(server.status).not.toHaveProperty("gpu")
@@ -69,6 +70,18 @@ describe("Komari 1.4.3 RPC2 adapters", () => {
 
   it("rejects legacy array-shaped node responses", () => {
     expect(() => normalizeNodes([])).toThrow("common:getNodes")
+  })
+
+  it("keeps hidden nodes returned to an authenticated administrator", () => {
+    const nodes = normalizeNodes({
+      ...nodeResponse,
+      "node-2": { ...nodeResponse["node-1"], uuid: "node-2", hidden: true },
+    })
+
+    expect(nodes.map((node) => [node.uuid, node.hidden])).toEqual([
+      ["node-1", false],
+      ["node-2", true],
+    ])
   })
 
   it("builds ping charts from tagged metric series and preserves missing points", () => {
@@ -114,8 +127,8 @@ describe("Komari 1.4.3 RPC2 adapters", () => {
 
 describe("RPC2 envelope validation", () => {
   it("returns a successful result", () => {
-    expect(parseRpcResponse({ jsonrpc: "2.0", id: 1, result: { version: "1.4.3" } }))
-      .toEqual({ version: "1.4.3" })
+    expect(parseRpcResponse({ jsonrpc: "2.0", id: 1, result: { version: "1.5.0" } }))
+      .toEqual({ version: "1.5.0" })
   })
 
   it("surfaces JSON-RPC errors", () => {

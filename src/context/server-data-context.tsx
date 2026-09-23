@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react"
 import type { KomariLatestStatus, KomariNode, ServerInfo, ServerOverview } from "@/types/komari"
-import { fetchLatestStatuses, fetchNodes, fetchVersion, normalizeServer } from "@/lib/komari-rpc"
+import { fetchLatestStatuses, fetchNodes, normalizeServer } from "@/lib/komari-rpc"
 
 export interface ServerDataWithTimestamp {
   timestamp: number
@@ -12,7 +12,6 @@ interface ServerDataContextType {
   error: Error | undefined
   isLoading: boolean
   history: ServerDataWithTimestamp[]
-  serverVersion: string
 }
 
 const ServerDataContext = createContext<ServerDataContextType | undefined>(undefined)
@@ -56,14 +55,13 @@ function hasSameServerSnapshot(prev: ServerInfo, next: ServerInfo): boolean {
     prev.updatedAt === next.updatedAt
 }
 
-function buildOverview(
+export function buildOverview(
   nodes: KomariNode[],
   statuses: Record<string, KomariLatestStatus>,
   previous: Map<string, ServerInfo>,
 ): { overview: ServerOverview; serverMap: Map<string, ServerInfo> } {
-  const visibleNodes = nodes.filter((node) => !node.hidden)
   const overview: ServerOverview = {
-    total: visibleNodes.length,
+    total: nodes.length,
     online: 0,
     offline: 0,
     totalInBandwidth: 0,
@@ -74,7 +72,7 @@ function buildOverview(
   }
   const serverMap = new Map<string, ServerInfo>()
 
-  for (const node of visibleNodes) {
+  for (const node of nodes) {
     const normalized = normalizeServer(node, statuses[node.uuid])
     const oldServer = previous.get(node.uuid)
     const server = oldServer && hasSameServerSnapshot(oldServer, normalized) ? oldServer : normalized
@@ -100,7 +98,6 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<Error | undefined>()
   const [isLoading, setIsLoading] = useState(true)
   const [history, setHistory] = useState<ServerDataWithTimestamp[]>([])
-  const [serverVersion, setServerVersion] = useState("")
   const previousServersRef = useRef<Map<string, ServerInfo>>(new Map())
 
   useEffect(() => {
@@ -148,15 +145,13 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
 
     const init = async () => {
       try {
-        const [nodeList, statuses, version] = await Promise.all([
+        const [nodeList, statuses] = await Promise.all([
           fetchNodes(controller.signal),
           fetchLatestStatuses(controller.signal),
-          fetchVersion(controller.signal),
         ])
         if (cancelled) return
 
         nodes = nodeList
-        setServerVersion(version)
         applyStatuses(statuses, true)
         setIsLoading(false)
         schedulePoll()
@@ -180,7 +175,7 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <ServerDataContext.Provider value={{ data, error, isLoading, history, serverVersion }}>
+    <ServerDataContext.Provider value={{ data, error, isLoading, history }}>
       {children}
     </ServerDataContext.Provider>
   )

@@ -2,7 +2,7 @@ import { ArrowDownCircleIcon, ArrowUpCircleIcon } from "@heroicons/react/20/soli
 import { useServerData } from "@/context/server-data-context"
 import { Card, CardContent } from "@/components/ui/card"
 import { Loader } from "@/components/Loader"
-import { cn, formatBytes, getThemeSetting } from "@/lib/utils"
+import { cn, formatBytes, formatSpeed, getThemeSetting } from "@/lib/utils"
 import { useLocale } from "@/context/locale-context"
 import { useState } from "react"
 import { usePublicInfo } from "@/hooks/usePublicInfo"
@@ -140,11 +140,11 @@ export default function ServerOverviewClient() {
                 <section className="-mr-1 flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:gap-1">
                   <p className="flex items-center text-nowrap font-semibold text-[11px]">
                     <ArrowUpCircleIcon className="mr-0.5 size-3 sm:mb-px" />
-                    {formatBytes(data.totalOutSpeed)}/s
+                    {formatSpeed(data.totalOutSpeed)}
                   </p>
                   <p className="flex items-center text-nowrap font-semibold text-[11px]">
                     <ArrowDownCircleIcon className="mr-0.5 size-3" />
-                    {formatBytes(data.totalInSpeed)}/s
+                    {formatSpeed(data.totalInSpeed)}
                   </p>
                 </section>
               </>

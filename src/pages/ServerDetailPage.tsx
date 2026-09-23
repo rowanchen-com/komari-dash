@@ -37,7 +37,7 @@ function getCountryDisplayName(countryCode: string): string {
 export default function ServerDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { data, error, isLoading, history, serverVersion } = useServerData()
+  const { data, error, isLoading, history } = useServerData()
   const { t, locale } = useLocale()
   const [currentTab, setCurrentTab] = useState<"Detail" | "Network">("Detail")
 
@@ -98,7 +98,7 @@ export default function ServerDetailPage() {
         <InfoCard label={t("ServerDetail", "Uptime")}>
           <div className="text-xs">{formatUptime(server.status.uptime, t)}</div>
         </InfoCard>
-        {(server.version || serverVersion) && <InfoCard label={t("ServerDetail", "Version")}><div className="text-xs">{server.version || serverVersion}</div></InfoCard>}
+        {server.version && <InfoCard label={t("ServerDetail", "Version")}><div className="text-xs">{server.version}</div></InfoCard>}
         {server.host.arch && <InfoCard label={t("ServerDetail", "Arch")}><div className="text-xs">{server.host.arch}</div></InfoCard>}
         <InfoCard label={t("ServerDetail", "Mem")}><div className="text-xs">{formatBytes(server.host.memTotal)}</div></InfoCard>
         <InfoCard label={t("ServerDetail", "Disk")}><div className="text-xs">{formatBytes(server.host.diskTotal)}</div></InfoCard>
@@ -451,7 +451,7 @@ function DiskChart({ uuid, history, server }: { uuid: string; history: ServerDat
 
 /* ── Network Chart ── */
 function formatChartSpeed(mebibytesPerSec: number): string {
-  return formatSpeed(mebibytesPerSec * 1024 * 1024).replace(" ", "")
+  return formatSpeed(mebibytesPerSec * 1024 * 1024)
 }
 
 function NetworkRealtimeChart({ uuid, history }: { uuid: string; history: ServerDataWithTimestamp[] }) {
@@ -501,14 +501,14 @@ function NetworkRealtimeChart({ uuid, history }: { uuid: string; history: Server
         <section className="flex flex-col gap-1">
           <div className="flex items-center">
             <section className="flex items-center gap-4">
-              <div className="flex w-20 flex-col">
+              <div className="flex w-24 flex-col">
                 <p className="text-muted-foreground text-xs">{t("ServerDetail", "Upload")}</p>
                 <div className="flex items-center gap-1">
                   <span className="relative inline-flex size-1.5 rounded-full bg-[hsl(var(--chart-1))]" />
                   <p className="font-medium text-xs">{formatSpeed(current.upload * 1024 * 1024)}</p>
                 </div>
               </div>
-              <div className="flex w-20 flex-col">
+              <div className="flex w-24 flex-col">
                 <p className="text-muted-foreground text-xs">{t("ServerDetail", "Download")}</p>
                 <div className="flex items-center gap-1">
                   <span className="relative inline-flex size-1.5 rounded-full bg-[hsl(var(--chart-4))]" />
@@ -521,7 +521,7 @@ function NetworkRealtimeChart({ uuid, history }: { uuid: string; history: Server
             <LineChart accessibilityLayer data={chartData} margin={{ top: 12, left: 12, right: 12 }}>
               <CartesianGrid vertical={false} />
               <XAxis dataKey="ts" tickLine={false} axisLine={false} tickMargin={8} minTickGap={200} interval="preserveStartEnd" tickFormatter={(v) => formatRelativeTime(Number(v))} />
-              <YAxis tickLine={false} axisLine={false} mirror tickMargin={-15} type="number" minTickGap={50} interval="preserveStartEnd" domain={[0, "auto"]} tickFormatter={(v) => formatChartSpeed(Number(v))} />
+              <YAxis tickLine={false} axisLine={false} width={96} tickMargin={4} type="number" minTickGap={50} interval="preserveStartEnd" domain={[0, "auto"]} tickFormatter={(v) => formatChartSpeed(Number(v))} />
               <Line isAnimationActive={false} dataKey="upload" type="linear" stroke="hsl(var(--chart-1))" strokeWidth={1} dot={false} />
               <Line isAnimationActive={false} dataKey="download" type="linear" stroke="hsl(var(--chart-4))" strokeWidth={1} dot={false} />
             </LineChart>
@@ -1216,14 +1216,14 @@ function ServerDetailSummary({ server }: { server: ServerInfo }) {
           <span className="font-medium text-[10px]">{server.status.udpConn}</span>
         </section>
       </section>
-      <section className="flex min-w-[120px] flex-col justify-center gap-0.5 px-1.5 py-1">
+      <section className="flex min-w-[150px] flex-col justify-center gap-0.5 px-1.5 py-1">
         <section className="flex items-center justify-between gap-4">
           <span className="text-[10px] text-muted-foreground">Upload</span>
-          <span className="font-medium text-[10px]">{formatSpeed(server.status.netOutSpeed).replace(" ", "")}</span>
+          <span className="font-medium text-[10px]">{formatSpeed(server.status.netOutSpeed)}</span>
         </section>
         <section className="flex items-center justify-between gap-4">
           <span className="text-[10px] text-muted-foreground">Download</span>
-          <span className="font-medium text-[10px]">{formatSpeed(server.status.netInSpeed).replace(" ", "")}</span>
+          <span className="font-medium text-[10px]">{formatSpeed(server.status.netInSpeed)}</span>
         </section>
       </section>
     </div>

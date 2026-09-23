@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, lazy, Suspense } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, lazy, Suspense } from "react"
 import { MapIcon, ViewColumnsIcon } from "@heroicons/react/20/solid"
 import { useServerData } from "@/context/server-data-context"
 import { Loader } from "@/components/Loader"
@@ -41,10 +41,11 @@ export default function ServerListClient() {
   const { info } = usePublicInfo()
   const { t } = useLocale()
   const showTag = getThemeSetting(info?.theme_settings, "showTag", true)
-  const containerRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLElement>(null)
   const [tag, setTag] = useState("defaultTag")
   const [showMap, setShowMap] = useState(false)
   const [inline, setInline] = useState("0")
+  const [listHeight, setListHeight] = useState<number>()
 
   useEffect(() => {
     const saved = sessionStorage.getItem("selectedTag") || "defaultTag"
@@ -63,6 +64,20 @@ export default function ServerListClient() {
   }
 
   const { data, error } = useServerData()
+
+  // Let the list change size without snapping the footer to its new position.
+  useLayoutEffect(() => {
+    const list = containerRef.current
+    if (!list) return
+
+    const syncHeight = () => setListHeight(list.getBoundingClientRect().height)
+    syncHeight()
+    if (typeof ResizeObserver === "undefined") return
+
+    const observer = new ResizeObserver(syncHeight)
+    observer.observe(list)
+    return () => observer.disconnect()
+  }, [inline, !!data?.servers, !!error])
 
   if (error) {
     return (
@@ -147,19 +162,24 @@ export default function ServerListClient() {
           <ServerGlobal />
         </Suspense>
       )}
-      {inline === "1" ? (
-        <section ref={containerRef} className="scrollbar-hidden flex flex-col gap-2 overflow-x-scroll p-px">
-          {filtered.map((server) => (
-            <ServerCardInline key={server.uuid} server={server} />
-          ))}
-        </section>
-      ) : (
-        <section ref={containerRef} className="grid grid-cols-1 gap-2 md:grid-cols-2">
-          {filtered.map((server) => (
-            <ServerCard key={server.uuid} server={server} />
-          ))}
-        </section>
-      )}
+      <div
+        className="transition-[height] duration-200 ease-out motion-reduce:transition-none [clip-path:inset(-12px)]"
+        style={listHeight === undefined ? undefined : { height: listHeight }}
+      >
+        {inline === "1" ? (
+          <section ref={containerRef} className="scrollbar-hidden flex flex-col gap-2 overflow-x-scroll p-px">
+            {filtered.map((server) => (
+              <ServerCardInline key={server.uuid} server={server} />
+            ))}
+          </section>
+        ) : (
+          <section ref={containerRef} className="grid grid-cols-1 gap-2 p-px md:grid-cols-2">
+            {filtered.map((server) => (
+              <ServerCard key={server.uuid} server={server} />
+            ))}
+          </section>
+        )}
+      </div>
     </>
   )
 }

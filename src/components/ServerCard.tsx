@@ -65,6 +65,7 @@ export default memo(function ServerCard({ server }: { server: ServerInfo }) {
       <Card
         className={cn(
           "flex cursor-pointer flex-col items-center justify-start gap-3 p-3 transition-all hover:shadow-sm hover:ring-stone-300 md:px-5 dark:hover:ring-stone-700",
+          showNetTransfer ? "min-h-[123px] lg:min-h-[91px]" : "min-h-[93px] lg:min-h-[61px]",
           {
             "flex-col": fixedTopServerName,
             "lg:flex-row": !fixedTopServerName,
@@ -127,11 +128,11 @@ export default memo(function ServerCard({ server }: { server: ServerInfo }) {
             </div>
             <div className="flex w-14 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "Upload")}</p>
-              <div className="flex items-center font-semibold text-xs">{formatSpeed(server.status.netOutSpeed)}</div>
+              <div className="min-w-0 font-semibold text-[11px] leading-tight">{formatSpeed(server.status.netOutSpeed)}</div>
             </div>
             <div className="flex w-14 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "Download")}</p>
-              <div className="flex items-center font-semibold text-xs">{formatSpeed(server.status.netInSpeed)}</div>
+              <div className="min-w-0 font-semibold text-[11px] leading-tight">{formatSpeed(server.status.netInSpeed)}</div>
             </div>
           </section>
           {showNetTransfer && (
