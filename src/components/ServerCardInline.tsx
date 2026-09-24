@@ -26,7 +26,7 @@ export default memo(function ServerCardInline({ server }: { server: ServerInfo }
 
   if (!server.online) {
     return (
-      <Link to={`/server/${server.uuid}`} onClick={saveSession}>
+      <Link to={`/server/${server.uuid}`} onClick={saveSession} style={{ viewTransitionName: `server-${server.uuid}` }}>
         <Card className="flex min-h-[61px] min-w-[900px] flex-row items-center justify-start gap-3 p-3 transition-all hover:shadow-sm hover:ring-stone-300 md:px-5 lg:flex-row dark:hover:ring-stone-700">
           <section className={cn("grid items-center gap-2 lg:w-40")} style={{ gridTemplateColumns: "auto auto 1fr" }}>
             <span className="h-2 w-2 shrink-0 self-center rounded-full bg-red-500" />
@@ -43,7 +43,7 @@ export default memo(function ServerCardInline({ server }: { server: ServerInfo }
   }
 
   return (
-    <Link to={`/server/${server.uuid}`} onClick={saveSession}>
+    <Link to={`/server/${server.uuid}`} onClick={saveSession} style={{ viewTransitionName: `server-${server.uuid}` }}>
       <Card className="flex min-h-[61px] w-full min-w-[900px] cursor-pointer items-center justify-start gap-3 p-3 transition-all hover:shadow-sm hover:ring-stone-300 md:px-5 lg:flex-row dark:hover:ring-stone-700">
         <section className={cn("grid items-center gap-2 lg:w-36")} style={{ gridTemplateColumns: "auto auto 1fr" }}>
           <span className="h-2 w-2 shrink-0 self-center rounded-full bg-green-500" />

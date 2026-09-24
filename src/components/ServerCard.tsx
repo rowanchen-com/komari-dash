@@ -28,7 +28,7 @@ export default memo(function ServerCard({ server }: { server: ServerInfo }) {
 
   if (!server.online) {
     return (
-      <Link to={`/server/${server.uuid}`} onClick={saveSession}>
+      <Link to={`/server/${server.uuid}`} onClick={saveSession} style={{ viewTransitionName: `server-${server.uuid}` }}>
         <Card
           className={cn(
             "flex cursor-pointer flex-col items-center justify-start gap-3 p-3 transition-all hover:shadow-sm hover:ring-stone-300 md:px-5 dark:hover:ring-stone-700",
@@ -61,7 +61,7 @@ export default memo(function ServerCard({ server }: { server: ServerInfo }) {
   }
 
   return (
-    <Link to={`/server/${server.uuid}`} onClick={saveSession}>
+    <Link to={`/server/${server.uuid}`} onClick={saveSession} style={{ viewTransitionName: `server-${server.uuid}` }}>
       <Card
         className={cn(
           "flex cursor-pointer flex-col items-center justify-start gap-3 p-3 transition-all hover:shadow-sm hover:ring-stone-300 md:px-5 dark:hover:ring-stone-700",

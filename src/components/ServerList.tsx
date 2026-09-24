@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, lazy, Suspense } from "react"
+import { flushSync } from "react-dom"
 import { MapIcon, ViewColumnsIcon } from "@heroicons/react/20/solid"
 import { useServerData } from "@/context/server-data-context"
 import { Loader } from "@/components/Loader"
@@ -44,8 +45,10 @@ export default function ServerListClient() {
   const containerRef = useRef<HTMLElement>(null)
   const [tag, setTag] = useState("defaultTag")
   const [showMap, setShowMap] = useState(false)
+  const [mapMounted, setMapMounted] = useState(false)
   const [inline, setInline] = useState("0")
   const [listHeight, setListHeight] = useState<number>()
+  const mapCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const saved = sessionStorage.getItem("selectedTag") || "defaultTag"
@@ -55,8 +58,34 @@ export default function ServerListClient() {
     if (inlineState !== null) setInline(inlineState)
 
     const showMapState = localStorage.getItem("showMap")
-    if (showMapState !== null) setShowMap(showMapState === "true")
+    if (showMapState === "true") {
+      setMapMounted(true)
+      setShowMap(true)
+    }
   }, [])
+
+  useEffect(() => () => {
+    if (mapCloseTimer.current) clearTimeout(mapCloseTimer.current)
+  }, [])
+
+  const handleMapToggle = () => {
+    const next = !showMap
+    if (mapCloseTimer.current) clearTimeout(mapCloseTimer.current)
+    if (next) setMapMounted(true)
+    setShowMap(next)
+    if (!next) mapCloseTimer.current = setTimeout(() => setMapMounted(false), 280)
+    localStorage.setItem("showMap", String(next))
+  }
+
+  const handleLayoutToggle = () => {
+    const next = inline === "0" ? "1" : "0"
+    if (document.startViewTransition && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      document.startViewTransition(() => flushSync(() => setInline(next)))
+    } else {
+      setInline(next)
+    }
+    localStorage.setItem("inline", next)
+  }
 
   const handleTagChange = (newTag: string) => {
     setTag(newTag)
@@ -123,11 +152,9 @@ export default function ServerListClient() {
       <section className="flex w-full items-center gap-2 overflow-hidden">
         <button
           type="button"
-          onClick={() => {
-            const newShowMap = !showMap
-            setShowMap(newShowMap)
-            localStorage.setItem("showMap", String(newShowMap))
-          }}
+          onClick={handleMapToggle}
+          aria-label="Toggle map"
+          aria-pressed={showMap}
           className={cn(
             "inset-shadow-2xs inset-shadow-white/20 flex cursor-pointer flex-col items-center gap-0 rounded-[50px] bg-blue-100 p-2.5 text-blue-600 transition-all dark:bg-blue-900 dark:text-blue-100",
             {
@@ -139,11 +166,9 @@ export default function ServerListClient() {
         </button>
         <button
           type="button"
-          onClick={() => {
-            const newInline = inline === "0" ? "1" : "0"
-            setInline(newInline)
-            localStorage.setItem("inline", newInline)
-          }}
+          onClick={handleLayoutToggle}
+          aria-label="Toggle full-width list"
+          aria-pressed={inline === "1"}
           className={cn(
             "inset-shadow-2xs inset-shadow-white/20 flex cursor-pointer flex-col items-center gap-0 rounded-[50px] bg-blue-100 p-2.5 text-blue-600 transition-all dark:bg-blue-900 dark:text-blue-100",
             {
@@ -157,17 +182,21 @@ export default function ServerListClient() {
           <Switch allTag={uniqueTags} nowTag={tag} tagCountMap={tagCountMap} onTagChange={handleTagChange} />
         )}
       </section>
-      {showMap && (
-        <Suspense fallback={<div className="flex min-h-40 items-center justify-center"><Loader visible /></div>}>
-          <ServerGlobal />
-        </Suspense>
+      {mapMounted && (
+        <div className="map-reveal min-w-0" data-open={showMap} aria-hidden={!showMap} inert={!showMap}>
+          <div className="min-h-0 overflow-hidden">
+            <Suspense fallback={<div className="flex min-h-40 items-center justify-center"><Loader visible /></div>}>
+              <ServerGlobal />
+            </Suspense>
+          </div>
+        </div>
       )}
       <div
-        className="transition-[height] duration-200 ease-out motion-reduce:transition-none [clip-path:inset(-12px)]"
+        className="min-w-0 transition-[height] duration-200 ease-out motion-reduce:transition-none [clip-path:inset(-12px)]"
         style={listHeight === undefined ? undefined : { height: listHeight }}
       >
         {inline === "1" ? (
-          <section ref={containerRef} className="scrollbar-hidden flex flex-col gap-2 overflow-x-scroll p-px">
+          <section ref={containerRef} className="scrollbar-hidden flex min-w-0 flex-col gap-2 overflow-x-auto p-px">
             {filtered.map((server) => (
               <ServerCardInline key={server.uuid} server={server} />
             ))}

@@ -3,7 +3,7 @@ import ServerListClient from "@/components/ServerList"
 
 export default function HomePage() {
   return (
-    <div className="mx-auto grid w-full max-w-5xl gap-4 md:gap-6">
+    <div className="mx-auto grid w-full min-w-0 max-w-5xl grid-cols-[minmax(0,1fr)] gap-4 md:gap-6">
       <ServerOverviewClient />
       <ServerListClient />
     </div>
