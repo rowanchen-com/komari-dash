@@ -35,26 +35,29 @@ export default function ThemeSwitcher() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        className="flex flex-col gap-0.5 border-none shadow-md shadow-stone-200/50 ring ring-stone-200 dark:shadow-none dark:ring-stone-800"
+        className="flex w-28 flex-col gap-0.5 border-none shadow-md shadow-stone-200/50 ring ring-stone-200 dark:shadow-none dark:ring-stone-800"
         align="end"
       >
         <DropdownMenuItem
-          className={cn("rounded-b-[5px]", { "gap-3 bg-muted font-semibold": theme === "light" })}
+          className={cn("justify-between gap-3 rounded-b-[5px]", { "bg-muted font-semibold": theme === "light" })}
           onSelect={(e) => handleSelect(e, "light")}
         >
-          {t("ThemeSwitcher", "Light")} {theme === "light" && <CheckCircleIcon className="size-4" />}
+          <span>{t("ThemeSwitcher", "Light")}</span>
+          <CheckCircleIcon className={cn("size-4 shrink-0", theme !== "light" && "invisible")} aria-hidden="true" />
         </DropdownMenuItem>
         <DropdownMenuItem
-          className={cn("rounded-[5px]", { "gap-3 bg-muted font-semibold": theme === "dark" })}
+          className={cn("justify-between gap-3 rounded-[5px]", { "bg-muted font-semibold": theme === "dark" })}
           onSelect={(e) => handleSelect(e, "dark")}
         >
-          {t("ThemeSwitcher", "Dark")} {theme === "dark" && <CheckCircleIcon className="size-4" />}
+          <span>{t("ThemeSwitcher", "Dark")}</span>
+          <CheckCircleIcon className={cn("size-4 shrink-0", theme !== "dark" && "invisible")} aria-hidden="true" />
         </DropdownMenuItem>
         <DropdownMenuItem
-          className={cn("rounded-t-[5px]", { "gap-3 bg-muted font-semibold": theme === "system" })}
+          className={cn("justify-between gap-3 rounded-t-[5px]", { "bg-muted font-semibold": theme === "system" })}
           onSelect={(e) => handleSelect(e, "system")}
         >
-          {t("ThemeSwitcher", "System")} {theme === "system" && <CheckCircleIcon className="size-4" />}
+          <span>{t("ThemeSwitcher", "System")}</span>
+          <CheckCircleIcon className={cn("size-4 shrink-0", theme !== "system" && "invisible")} aria-hidden="true" />
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

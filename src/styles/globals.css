@@ -194,19 +194,12 @@
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
-  transition: grid-template-rows 280ms ease, opacity 200ms ease;
+  transition: grid-template-rows 360ms linear, opacity 220ms linear;
 }
 
 .map-reveal[data-open="true"] {
   grid-template-rows: 1fr;
   opacity: 1;
-}
-
-@starting-style {
-  .map-reveal[data-open="true"] {
-    grid-template-rows: 0fr;
-    opacity: 0;
-  }
 }
 
 ::view-transition-old(root),

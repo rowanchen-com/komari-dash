@@ -31,7 +31,7 @@ export default function LanguageSwitcher() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        className="flex flex-col gap-0.5 border-none shadow-md shadow-stone-200/50 ring ring-stone-200 dark:shadow-none dark:ring-stone-800"
+        className="flex w-28 flex-col gap-0.5 border-none shadow-md shadow-stone-200/50 ring ring-stone-200 dark:shadow-none dark:ring-stone-800"
         align="end"
       >
         {localeItems.map((item, index) => (
@@ -39,7 +39,8 @@ export default function LanguageSwitcher() {
             key={item.code}
             onSelect={(e) => handleSelect(e, item.code)}
             className={cn(
-              { "gap-3 bg-muted font-semibold": locale === item.code },
+              "justify-between gap-3",
+              { "bg-muted font-semibold": locale === item.code },
               {
                 "rounded-t-[5px]": index === localeItems.length - 1,
                 "rounded-[5px]": index !== 0 && index !== localeItems.length - 1,
@@ -47,7 +48,8 @@ export default function LanguageSwitcher() {
               },
             )}
           >
-            {item.name} {locale === item.code && <CheckCircleIcon className="size-4" />}
+            <span>{item.name}</span>
+            <CheckCircleIcon className={cn("size-4 shrink-0", locale !== item.code && "invisible")} aria-hidden="true" />
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

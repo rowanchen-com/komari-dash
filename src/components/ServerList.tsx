@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, lazy, Suspense } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ComponentType } from "react"
 import { flushSync } from "react-dom"
 import { MapIcon, ViewColumnsIcon } from "@heroicons/react/20/solid"
 import { useServerData } from "@/context/server-data-context"
@@ -13,7 +13,7 @@ import { cn, getThemeSetting } from "@/lib/utils"
 import { useLocale } from "@/context/locale-context"
 import type { ServerInfo } from "@/types/komari"
 
-const ServerGlobal = lazy(() => import("@/components/ServerGlobal"))
+const MAP_TRANSITION_MS = 420
 
 function useFilters() {
   const status = useSyncExternalStore(subscribeFilter, getStatusFilter)
@@ -45,7 +45,9 @@ export default function ServerListClient() {
   const containerRef = useRef<HTMLElement>(null)
   const [tag, setTag] = useState("defaultTag")
   const [showMap, setShowMap] = useState(false)
+  const [MapComponent, setMapComponent] = useState<ComponentType | null>(null)
   const [mapMounted, setMapMounted] = useState(false)
+  const [mapExpanded, setMapExpanded] = useState(false)
   const [inline, setInline] = useState("0")
   const [listHeight, setListHeight] = useState<number>()
   const mapCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -58,11 +60,44 @@ export default function ServerListClient() {
     if (inlineState !== null) setInline(inlineState)
 
     const showMapState = localStorage.getItem("showMap")
-    if (showMapState === "true") {
-      setMapMounted(true)
-      setShowMap(true)
-    }
+    if (showMapState === "true") setShowMap(true)
   }, [])
+
+  useEffect(() => {
+    let active = true
+    void import("@/components/ServerGlobal").then(({ default: Component }) => {
+      if (active) setMapComponent(() => Component)
+    }).catch(() => {})
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    if (!showMap || MapComponent) return
+    let active = true
+    void import("@/components/ServerGlobal").then(({ default: Component }) => {
+      if (active) setMapComponent(() => Component)
+    }).catch(() => {
+      if (active) {
+        setShowMap(false)
+        localStorage.setItem("showMap", "false")
+      }
+    })
+    return () => { active = false }
+  }, [showMap, MapComponent])
+
+  useEffect(() => {
+    if (showMap && MapComponent) setMapMounted(true)
+  }, [showMap, MapComponent])
+
+  useEffect(() => {
+    if (!showMap || !mapMounted) return
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setMapExpanded(true)
+      return
+    }
+    const frame = requestAnimationFrame(() => setMapExpanded(true))
+    return () => cancelAnimationFrame(frame)
+  }, [showMap, mapMounted])
 
   useEffect(() => () => {
     if (mapCloseTimer.current) clearTimeout(mapCloseTimer.current)
@@ -71,9 +106,11 @@ export default function ServerListClient() {
   const handleMapToggle = () => {
     const next = !showMap
     if (mapCloseTimer.current) clearTimeout(mapCloseTimer.current)
-    if (next) setMapMounted(true)
     setShowMap(next)
-    if (!next) mapCloseTimer.current = setTimeout(() => setMapMounted(false), 280)
+    if (!next) {
+      setMapExpanded(false)
+      mapCloseTimer.current = setTimeout(() => setMapMounted(false), MAP_TRANSITION_MS)
+    }
     localStorage.setItem("showMap", String(next))
   }
 
@@ -182,32 +219,33 @@ export default function ServerListClient() {
           <Switch allTag={uniqueTags} nowTag={tag} tagCountMap={tagCountMap} onTagChange={handleTagChange} />
         )}
       </section>
-      {mapMounted && (
-        <div className="map-reveal min-w-0" data-open={showMap} aria-hidden={!showMap} inert={!showMap}>
-          <div className="min-h-0 overflow-hidden">
-            <Suspense fallback={<div className="flex min-h-40 items-center justify-center"><Loader visible /></div>}>
-              <ServerGlobal />
-            </Suspense>
+      <div className="min-w-0">
+        {mapMounted && MapComponent && (
+          <div className="map-reveal min-w-0" data-open={mapExpanded} aria-hidden={!mapExpanded} inert={!mapExpanded}>
+            <div className="min-h-0 overflow-hidden">
+              <MapComponent />
+              <div className="h-4 md:h-6" />
+            </div>
           </div>
-        </div>
-      )}
-      <div
-        className="min-w-0 transition-[height] duration-200 ease-out motion-reduce:transition-none [clip-path:inset(-12px)]"
-        style={listHeight === undefined ? undefined : { height: listHeight }}
-      >
-        {inline === "1" ? (
-          <section ref={containerRef} className="scrollbar-hidden flex min-w-0 flex-col gap-2 overflow-x-auto p-px">
-            {filtered.map((server) => (
-              <ServerCardInline key={server.uuid} server={server} />
-            ))}
-          </section>
-        ) : (
-          <section ref={containerRef} className="grid grid-cols-1 gap-2 p-px md:grid-cols-2">
-            {filtered.map((server) => (
-              <ServerCard key={server.uuid} server={server} />
-            ))}
-          </section>
         )}
+        <div
+          className="min-w-0 transition-[height] duration-200 ease-out motion-reduce:transition-none [clip-path:inset(-12px)]"
+          style={listHeight === undefined ? undefined : { height: listHeight }}
+        >
+          {inline === "1" ? (
+            <section ref={containerRef} className="scrollbar-hidden flex min-w-0 flex-col gap-2 overflow-x-auto p-px">
+              {filtered.map((server) => (
+                <ServerCardInline key={server.uuid} server={server} />
+              ))}
+            </section>
+          ) : (
+            <section ref={containerRef} className="grid grid-cols-1 gap-2 p-px md:grid-cols-2">
+              {filtered.map((server) => (
+                <ServerCard key={server.uuid} server={server} />
+              ))}
+            </section>
+          )}
+        </div>
       </div>
     </>
   )
