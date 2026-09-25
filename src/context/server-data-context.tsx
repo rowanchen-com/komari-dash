@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react"
 import type { KomariLatestStatus, KomariNode, ServerInfo, ServerOverview } from "@/types/komari"
-import { fetchLatestStatuses, fetchNodes, normalizeServer } from "@/lib/komari-rpc"
+import { fetchLatestStatuses, fetchNodes, fetchRecentNetworkData, normalizeServer, type NetworkSpeedSample } from "@/lib/komari-rpc"
+import { mergeNetworkHistories } from "@/lib/network-chart"
 
 export interface ServerDataWithTimestamp {
   timestamp: number
@@ -12,6 +13,7 @@ interface ServerDataContextType {
   error: Error | undefined
   isLoading: boolean
   history: ServerDataWithTimestamp[]
+  networkHistory: Record<string, NetworkSpeedSample[]>
 }
 
 const ServerDataContext = createContext<ServerDataContextType | undefined>(undefined)
@@ -98,6 +100,7 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<Error | undefined>()
   const [isLoading, setIsLoading] = useState(true)
   const [history, setHistory] = useState<ServerDataWithTimestamp[]>([])
+  const [networkHistory, setNetworkHistory] = useState<Record<string, NetworkSpeedSample[]>>({})
   const previousServersRef = useRef<Map<string, ServerInfo>>(new Map())
 
   useEffect(() => {
@@ -107,10 +110,11 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
     let nodes: KomariNode[] = []
     const controller = new AbortController()
 
-    const applyStatuses = (statuses: Record<string, KomariLatestStatus>, initial = false) => {
+    const applyStatuses = (statuses: Record<string, KomariLatestStatus>, recentHistory: Record<string, NetworkSpeedSample[]>, initial = false) => {
       const { overview, serverMap } = buildOverview(nodes, statuses, previousServersRef.current)
       previousServersRef.current = serverMap
       setData(overview)
+      setNetworkHistory((current) => mergeNetworkHistories(current, recentHistory, Date.now()))
       setHistory((current) => {
         const next = { timestamp: Date.now(), data: overview }
         return initial ? [next] : [next, ...current].slice(0, MAX_HISTORY_LENGTH)
@@ -127,8 +131,9 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
       if (cancelled || polling) return
       polling = true
       try {
-        const statuses = await fetchLatestStatuses(controller.signal)
-        if (!cancelled) applyStatuses(statuses)
+        const latest = await fetchLatestStatuses(controller.signal)
+        const { statuses, history: recentHistory } = await fetchRecentNetworkData(nodes, latest, controller.signal)
+        if (!cancelled) applyStatuses(statuses, recentHistory)
       } catch {
         // Keep the last successful snapshot during transient network failures.
       } finally {
@@ -145,14 +150,16 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
 
     const init = async () => {
       try {
-        const [nodeList, statuses] = await Promise.all([
+        const [nodeList, latest] = await Promise.all([
           fetchNodes(controller.signal),
           fetchLatestStatuses(controller.signal),
         ])
         if (cancelled) return
 
         nodes = nodeList
-        applyStatuses(statuses, true)
+        const { statuses, history: recentHistory } = await fetchRecentNetworkData(nodes, latest, controller.signal)
+        if (cancelled) return
+        applyStatuses(statuses, recentHistory, true)
         setIsLoading(false)
         schedulePoll()
       } catch (initError) {
@@ -175,7 +182,7 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <ServerDataContext.Provider value={{ data, error, isLoading, history }}>
+    <ServerDataContext.Provider value={{ data, error, isLoading, history, networkHistory }}>
       {children}
     </ServerDataContext.Provider>
   )

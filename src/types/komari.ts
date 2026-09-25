@@ -95,6 +95,7 @@ export interface PingChartPoint {
   taskId: string
   time: string
   value: number | null
+  loss: number | null
 }
 
 export interface PingChartTask {

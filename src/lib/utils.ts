@@ -7,21 +7,12 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatBytes(bytes: number, decimals = 2) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B"
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 Bytes"
   const k = 1024
   const dm = decimals < 0 ? 0 : decimals
-  const sizes = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"]
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${Number.parseFloat((bytes / k ** i).toFixed(dm))} ${sizes[i]}`
-}
-
-export function formatSpeed(bytesPerSec: number): string {
-  const value = Number.isFinite(bytesPerSec) ? Math.max(0, bytesPerSec) : 0
-  const format = (speed: number, unit: string) => `${Number.parseFloat(speed.toFixed(2))} ${unit}/s`
-  if (value >= 1024 ** 3) return format(value / 1024 ** 3, "GiB")
-  if (value >= 0.01 * 1024 ** 2) return format(value / 1024 ** 2, "MiB")
-  if (value >= 0.01 * 1024) return format(value / 1024, "KiB")
-  return format(value, "B")
+  const sizes = ["Bytes", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"]
+  const index = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${Number.parseFloat((bytes / k ** index).toFixed(dm))} ${sizes[index]}`
 }
 
 export function formatUptime(seconds: number, t?: (section: string, key: string) => string): string {

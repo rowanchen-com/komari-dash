@@ -5,7 +5,7 @@ import ServerUsageBar from "@/components/ServerUsageBar"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import type { ServerInfo } from "@/types/komari"
-import { cn, formatBytes, formatSpeed, getMemPercent, getDiskPercent, getThemeSetting } from "@/lib/utils"
+import { cn, formatBytes, getMemPercent, getDiskPercent, getThemeSetting } from "@/lib/utils"
 import { GetFontLogoClass, GetOsName, IsWindows, MageMicrosoftWindows } from "@/lib/logo-class"
 import { useLocale } from "@/context/locale-context"
 import { usePublicInfo } from "@/hooks/usePublicInfo"
@@ -21,6 +21,8 @@ export default memo(function ServerCard({ server }: { server: ServerInfo }) {
   const cpu = server.status.cpu
   const mem = getMemPercent(server)
   const stg = getDiskPercent(server)
+  const up = server.status.netOutSpeed / 1024 / 1024
+  const down = server.status.netInSpeed / 1024 / 1024
 
   const saveSession = () => {
     sessionStorage.setItem("fromMainPage", "true")
@@ -128,11 +130,11 @@ export default memo(function ServerCard({ server }: { server: ServerInfo }) {
             </div>
             <div className="flex w-14 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "Upload")}</p>
-              <div className="min-w-0 font-semibold text-[11px] leading-tight">{formatSpeed(server.status.netOutSpeed)}</div>
+              <div className="min-w-0 font-semibold text-[11px] leading-tight">{up >= 1024 ? `${(up / 1024).toFixed(2)}G/s` : `${up.toFixed(2)}M/s`}</div>
             </div>
             <div className="flex w-14 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "Download")}</p>
-              <div className="min-w-0 font-semibold text-[11px] leading-tight">{formatSpeed(server.status.netInSpeed)}</div>
+              <div className="min-w-0 font-semibold text-[11px] leading-tight">{down >= 1024 ? `${(down / 1024).toFixed(2)}G/s` : `${down.toFixed(2)}M/s`}</div>
             </div>
           </section>
           {showNetTransfer && (

@@ -6,7 +6,7 @@ describe("LoginButton", () => {
   it("links to Komari's stable admin entry", () => {
     const html = renderToStaticMarkup(<LoginButton />)
 
-    expect(html).toContain('href="/admin"')
+    expect(html).toContain('href="/admin/dashboard"')
     expect(html).not.toContain("<button")
   })
 })

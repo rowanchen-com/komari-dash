@@ -5,6 +5,7 @@ import type {
   KomariPublicInfo,
   MetricSeries,
   PingChartData,
+  PingChartPoint,
   PingChartTask,
   PingMetricStat,
   PingMetricStatsResponse,
@@ -14,6 +15,7 @@ import type {
 } from "@/types/komari"
 
 const PING_LATENCY_METRIC = "ping.latency_ms"
+const PING_LOSS_METRIC = "ping.loss"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -170,6 +172,90 @@ export async function fetchLatestStatuses(signal?: AbortSignal): Promise<Record<
   return normalizeLatestStatuses(result)
 }
 
+export interface NetworkSpeedSample {
+  timestamp: number
+  up: number
+  down: number
+}
+
+const NETWORK_IN_METRIC = "net.in.rate"
+const NETWORK_OUT_METRIC = "net.out.rate"
+
+export function buildNetworkMetricHistory(value: unknown, uuid: string): NetworkSpeedSample[] {
+  if (!isRecord(value) || !Array.isArray(value.series)) return []
+  const points = new Map<number, NetworkSpeedSample>()
+  for (const series of value.series) {
+    if (!isRecord(series) || series.entity_id !== uuid || !Array.isArray(series.points)) continue
+    const key = series.metric_key
+    if (key !== NETWORK_IN_METRIC && key !== NETWORK_OUT_METRIC) continue
+    for (const point of series.points) {
+      if (!isRecord(point) || typeof point.value !== "number" || !Number.isFinite(point.value) || point.value < 0) continue
+      const timestamp = Date.parse(asString(point.time))
+      if (!Number.isFinite(timestamp)) continue
+      const sample = points.get(timestamp) ?? { timestamp, up: 0, down: 0 }
+      if (key === NETWORK_OUT_METRIC) sample.up = point.value
+      else sample.down = point.value
+      points.set(timestamp, sample)
+    }
+  }
+  return [...points.values()].sort((a, b) => a.timestamp - b.timestamp)
+}
+
+export async function fetchNetworkMetricHistory(uuid: string, signal?: AbortSignal): Promise<NetworkSpeedSample[]> {
+  const result = await rpcCall<Record<string, unknown>, QueryMetricsResponse>("public:queryMetrics", {
+    metric_keys: [NETWORK_IN_METRIC, NETWORK_OUT_METRIC],
+    entity_id: uuid,
+    hours: 0.25,
+    max_points: 1000,
+    aggregation: "max",
+    fill_empty: false,
+  }, { signal, timeout: 30000 })
+  return buildNetworkMetricHistory(result, uuid)
+}
+
+function recentNetwork(value: unknown): NetworkSpeedSample[] {
+  if (!isRecord(value) || value.status !== "success" || !Array.isArray(value.data)) return []
+  return value.data.flatMap((entry): NetworkSpeedSample[] => {
+    if (!isRecord(entry) || !isRecord(entry.network)) return []
+    const { up, down } = entry.network
+    const timestamp = Date.parse(asString(entry.updated_at))
+    if (!Number.isFinite(timestamp) || typeof up !== "number" || !Number.isFinite(up) || typeof down !== "number" || !Number.isFinite(down)) return []
+    return [{ timestamp, up, down }]
+  }).sort((a, b) => a.timestamp - b.timestamp).slice(-30)
+}
+
+export async function fetchRecentNetworkData(
+  nodes: readonly KomariNode[],
+  statuses: Record<string, KomariLatestStatus>,
+  signal?: AbortSignal,
+): Promise<{ statuses: Record<string, KomariLatestStatus>; history: Record<string, NetworkSpeedSample[]> }> {
+  const readings = await Promise.all(nodes.map(async (node) => {
+    if (!statuses[node.uuid]?.online) return null
+    try {
+      const response = await fetch(`/api/recent/${encodeURIComponent(node.uuid)}`, { signal })
+      if (!response.ok) return null
+      const samples = recentNetwork(await response.json())
+      return samples.length > 0 ? { uuid: node.uuid, samples } : null
+    } catch {
+      return null
+    }
+  }))
+
+  const result = { ...statuses }
+  const history: Record<string, NetworkSpeedSample[]> = {}
+  for (const reading of readings) {
+    if (!reading) continue
+    const latest = reading.samples[reading.samples.length - 1]
+    result[reading.uuid] = {
+      ...result[reading.uuid],
+      net_out: latest.up,
+      net_in: latest.down,
+    }
+    history[reading.uuid] = reading.samples
+  }
+  return { statuses: result, history }
+}
+
 export async function fetchPublicInfo(signal?: AbortSignal): Promise<KomariPublicInfo> {
   const result = await rpcCall<undefined, unknown>("common:getPublicInfo", undefined, { signal })
   if (!isRecord(result)) throw new Error("Invalid common:getPublicInfo result")
@@ -189,6 +275,7 @@ export function buildPingChartData(
   tasksValue: unknown,
   metricsValue: unknown,
   statsValue: unknown,
+  additionalTaskIds: Iterable<string> = [],
 ): PingChartData {
   const tasks = Array.isArray(tasksValue) ? tasksValue : []
   const metrics = isRecord(metricsValue) && Array.isArray(metricsValue.series)
@@ -229,7 +316,21 @@ export function buildPingChartData(
   }
 
   const points: PingChartData["points"] = []
-  const taskIds = new Set<string>()
+  const taskIds = new Set(additionalTaskIds)
+  const losses = new Map<string, number | null>()
+  for (const value of metrics) {
+    if (!isRecord(value) || value.metric_key !== PING_LOSS_METRIC || value.entity_id !== uuid || !Array.isArray(value.points)) continue
+    const series = value as unknown as MetricSeries
+    for (const point of series.points) {
+      if (!isRecord(point)) continue
+      const taskId = pointTaskId(series, point)
+      const time = asString(point.time)
+      if (!taskId || !Number.isFinite(Date.parse(time))) continue
+      losses.set(`${taskId}:${time}`, typeof point.value === "number" && Number.isFinite(point.value)
+        ? Math.max(0, Math.min(100, point.value * 100))
+        : null)
+    }
+  }
   for (const value of metrics) {
     if (
       !isRecord(value) ||
@@ -250,6 +351,7 @@ export function buildPingChartData(
         value: typeof point.value === "number" && Number.isFinite(point.value) && point.value >= 0
           ? point.value
           : null,
+        loss: losses.get(`${taskId}:${time}`) ?? null,
       })
     }
   }
@@ -267,26 +369,80 @@ export function buildPingChartData(
   }).sort((left, right) => left.weight - right.weight || Number(left.id) - Number(right.id))
 
   points.sort((left, right) => new Date(left.time).getTime() - new Date(right.time).getTime())
-  return { points, tasks: chartTasks }
+  const firstValid = points.findIndex((point) => point.value !== null || point.loss !== null)
+  let lastValid = points.length - 1
+  while (lastValid >= 0 && points[lastValid].value === null && points[lastValid].loss === null) lastValid--
+  return { points: firstValid < 0 ? [] : points.slice(firstValid, lastValid + 1), tasks: chartTasks }
 }
 
-export async function fetchPingChartData(uuid: string, hours = 48, signal?: AbortSignal): Promise<PingChartData> {
-  const [tasks, metrics, stats] = await Promise.all([
+export function buildPingRecordPoints(value: unknown, uuid: string): PingChartPoint[] {
+  if (!isRecord(value) || value.status !== "success" || !isRecord(value.data) || !Array.isArray(value.data.records)) return []
+  const points: PingChartPoint[] = []
+  for (const record of value.data.records) {
+    if (!isRecord(record) || record.client !== uuid) continue
+    const taskId = String(record.task_id ?? "")
+    const time = asString(record.time)
+    const latency = record.value
+    if (!/^\d+$/.test(taskId) || !Number.isFinite(Date.parse(time)) || typeof latency !== "number" || !Number.isFinite(latency)) continue
+    points.push({ taskId, time, value: latency >= 0 ? latency : null, loss: latency < 0 ? 100 : 0 })
+  }
+  return points.sort((a, b) => Date.parse(a.time) - Date.parse(b.time))
+}
+
+export function mergePingPoints(base: readonly PingChartPoint[], overlay: readonly PingChartPoint[], replaceTail = false): PingChartPoint[] {
+  const firstOverlay = new Map<string, number>()
+  for (const point of overlay) {
+    const time = Date.parse(point.time)
+    if (!Number.isFinite(time)) continue
+    firstOverlay.set(point.taskId, Math.min(firstOverlay.get(point.taskId) ?? time, time))
+  }
+  const merged = new Map<string, PingChartPoint>()
+  for (const point of base) {
+    const time = Date.parse(point.time)
+    if (!Number.isFinite(time) || (replaceTail && time >= (firstOverlay.get(point.taskId) ?? Infinity))) continue
+    merged.set(`${point.taskId}:${time}`, point)
+  }
+  for (const point of overlay) {
+    const time = Date.parse(point.time)
+    if (Number.isFinite(time)) merged.set(`${point.taskId}:${time}`, point)
+  }
+  return [...merged.values()].sort((a, b) => Date.parse(a.time) - Date.parse(b.time) || Number(a.taskId) - Number(b.taskId))
+}
+
+export async function fetchRecentPingChartPoints(uuid: string, hours: number, signal?: AbortSignal): Promise<PingChartPoint[]> {
+  try {
+    const response = await fetch(`/api/records/ping?uuid=${encodeURIComponent(uuid)}&hours=${hours}`, { signal })
+    if (!response.ok) return []
+    return buildPingRecordPoints(await response.json(), uuid)
+  } catch (error) {
+    if (signal?.aborted) throw error
+    return []
+  }
+}
+
+export async function fetchPingChartData(uuid: string, hours = 24, signal?: AbortSignal): Promise<PingChartData> {
+  const [tasks, metrics, stats, records, recent] = await Promise.all([
     rpcCall<undefined, PublicPingTask[]>("public:getPublicPingTasks", undefined, { signal }).catch(() => []),
     rpcCall<Record<string, unknown>, QueryMetricsResponse>("public:queryMetrics", {
-      metric_keys: [PING_LATENCY_METRIC],
+      metric_keys: [PING_LATENCY_METRIC, PING_LOSS_METRIC],
       entity_id: uuid,
       hours,
-      max_points: 240,
+      max_points: 2000,
       aggregation: "avg",
-      fill_empty: true,
-    }, { signal, timeout: 30000 }),
+      fill_empty: false,
+    }, { signal, timeout: 30000 }).catch(() => ({ series: [] })),
     rpcCall<Record<string, unknown>, PingMetricStatsResponse>("public:getPingMetricStats", {
       entity_id: uuid,
       hours,
-      max_points: 240,
+      max_points: 2000,
     }, { signal, timeout: 30000 }).catch(() => ({ stats: [] })),
+    fetchRecentPingChartPoints(uuid, hours, signal),
+    fetchRecentPingChartPoints(uuid, Math.min(hours, 8), signal),
   ])
 
-  return buildPingChartData(uuid, tasks, metrics, stats)
+  const recordTaskIds = new Set([...records, ...recent].map((point) => point.taskId))
+  const fallback = buildPingChartData(uuid, tasks, metrics, stats, recordTaskIds)
+  const recordSpan = records.length > 1 ? Date.parse(records[records.length - 1].time) - Date.parse(records[0].time) : 0
+  const history = recordSpan >= Math.min(hours, 12) * 3_600_000 ? records : fallback.points
+  return { tasks: fallback.tasks, points: mergePingPoints(history, recent, true) }
 }

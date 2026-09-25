@@ -10,7 +10,7 @@ export function LoginButton() {
       className="cursor-pointer rounded-full bg-white px-[9px] hover:bg-accent/50 dark:bg-black dark:hover:bg-accent/50"
       title="Login"
     >
-      <a href="/admin">
+      <a href="/admin/dashboard">
         <UserCircleIcon className="size-4" />
         <span className="sr-only">Login</span>
       </a>

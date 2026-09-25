@@ -2,7 +2,7 @@ import { ArrowDownCircleIcon, ArrowUpCircleIcon } from "@heroicons/react/20/soli
 import { useServerData } from "@/context/server-data-context"
 import { Card, CardContent } from "@/components/ui/card"
 import { Loader } from "@/components/Loader"
-import { cn, formatBytes, formatSpeed, getThemeSetting } from "@/lib/utils"
+import { cn, formatBytes, getThemeSetting } from "@/lib/utils"
 import { useLocale } from "@/context/locale-context"
 import { useState } from "react"
 import { usePublicInfo } from "@/hooks/usePublicInfo"
@@ -129,7 +129,7 @@ export default function ServerOverviewClient() {
             <p className="font-medium text-sm md:text-base">{t("ServerOverview", "network")}</p>
             {data ? (
               <>
-                <section className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start sm:gap-1 sm:pr-0">
+                <section className="flex flex-row flex-wrap items-start gap-1 pr-0">
                   <p className="text-nowrap font-medium text-[12px] text-blue-800 dark:text-blue-400">
                     ↑{formatBytes(data.totalOutBandwidth)}
                   </p>
@@ -137,14 +137,14 @@ export default function ServerOverviewClient() {
                     ↓{formatBytes(data.totalInBandwidth)}
                   </p>
                 </section>
-                <section className="-mr-1 flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:gap-1">
+                <section className="-mr-1 flex flex-row flex-wrap items-start gap-1 sm:items-center">
                   <p className="flex items-center text-nowrap font-semibold text-[11px]">
                     <ArrowUpCircleIcon className="mr-0.5 size-3 sm:mb-px" />
-                    {formatSpeed(data.totalOutSpeed)}
+                    {formatBytes(data.totalOutSpeed)}/s
                   </p>
                   <p className="flex items-center text-nowrap font-semibold text-[11px]">
                     <ArrowDownCircleIcon className="mr-0.5 size-3" />
-                    {formatSpeed(data.totalInSpeed)}
+                    {formatBytes(data.totalInSpeed)}/s
                   </p>
                 </section>
               </>

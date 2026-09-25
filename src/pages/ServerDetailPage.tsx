@@ -13,10 +13,12 @@ import AnimatedCircularProgressBar from "@/components/ui/animated-circular-progr
 import { Label } from "@/components/ui/label"
 import { SwitchUI } from "@/components/ui/switch-ui"
 import { Progress } from "@/components/ui/progress"
-import { cn, formatBytes, formatSpeed, formatUptime, formatRelativeTime, formatDateTime, getMemPercent, getDiskPercent, getSwapPercent, isEmojiFlag, getCountryCode } from "@/lib/utils"
+import { cn, formatBytes, formatUptime, formatRelativeTime, formatDateTime, getMemPercent, getDiskPercent, getSwapPercent, isEmojiFlag, getCountryCode } from "@/lib/utils"
+import { buildNetworkChartData, combineNetworkHistory, getNetworkAxisMax } from "@/lib/network-chart"
+import { getPingChartTicks, smoothPingChartData } from "@/lib/ping-chart"
 import { useLocale } from "@/context/locale-context"
-import type { PingChartTask, ServerInfo } from "@/types/komari"
-import { fetchPingChartData } from "@/lib/komari-rpc"
+import type { PingChartData as KomariPingChartData, PingChartTask, ServerInfo } from "@/types/komari"
+import { fetchNetworkMetricHistory, fetchPingChartData, fetchRecentPingChartPoints, mergePingPoints, type NetworkSpeedSample } from "@/lib/komari-rpc"
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ComposedChart, XAxis, YAxis } from "recharts"
 
 countries.registerLocale(enLocale)
@@ -37,7 +39,7 @@ function getCountryDisplayName(countryCode: string): string {
 export default function ServerDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { data, error, isLoading, history } = useServerData()
+  const { data, error, isLoading, history, networkHistory } = useServerData()
   const { t, locale } = useLocale()
   const [currentTab, setCurrentTab] = useState<"Detail" | "Network">("Detail")
 
@@ -166,7 +168,7 @@ export default function ServerDetailPage() {
         <CpuChart uuid={id!} history={history} server={server} />
         <MemChart uuid={id!} history={history} server={server} />
         <DiskChart uuid={id!} history={history} server={server} />
-        <NetworkRealtimeChart uuid={id!} history={history} />
+        <NetworkRealtimeChart server={server} history={history} recent={networkHistory[server.uuid] ?? []} />
         <ConnRealtimeChart uuid={id!} history={history} />
         <ProcessChart uuid={id!} history={history} server={server} />
       </section>
@@ -218,8 +220,9 @@ function CpuChart({ uuid, history, server }: { uuid: string; history: ServerData
     const latest = history[0]
     const s = latest.data.servers.find((s) => s.uuid === uuid)
     if (!s) return
-    const timestamp = Date.now().toString()
+    const timestamp = latest.timestamp.toString()
     setChartData((prev) => {
+      if (prev[prev.length - 1]?.ts === timestamp) return prev
       let newData: { ts: string; v: number }[]
       if (prev.length === 0) {
         newData = [
@@ -292,8 +295,9 @@ function MemChart({ uuid, history, server }: { uuid: string; history: ServerData
     const latest = history[0]
     const s = latest.data.servers.find((s) => s.uuid === uuid)
     if (!s) return
-    const timestamp = Date.now().toString()
+    const timestamp = latest.timestamp.toString()
     setChartData((prev) => {
+      if (prev[prev.length - 1]?.ts === timestamp) return prev
       let newData: { ts: string; mem: number; swap: number }[]
       if (prev.length === 0) {
         newData = [
@@ -393,8 +397,9 @@ function DiskChart({ uuid, history, server }: { uuid: string; history: ServerDat
     const latest = history[0]
     const s = latest.data.servers.find((s) => s.uuid === uuid)
     if (!s) return
-    const timestamp = Date.now().toString()
+    const timestamp = latest.timestamp.toString()
     setChartData((prev) => {
+      if (prev[prev.length - 1]?.ts === timestamp) return prev
       let newData: { ts: string; v: number }[]
       if (prev.length === 0) {
         newData = [
@@ -450,49 +455,25 @@ function DiskChart({ uuid, history, server }: { uuid: string; history: ServerDat
 }
 
 /* ── Network Chart ── */
-function formatChartSpeed(mebibytesPerSec: number): string {
-  return formatSpeed(mebibytesPerSec * 1024 * 1024)
-}
-
-function NetworkRealtimeChart({ uuid, history }: { uuid: string; history: ServerDataWithTimestamp[] }) {
+function NetworkRealtimeChart({ server, history, recent }: { server: ServerInfo; history: ServerDataWithTimestamp[]; recent: NetworkSpeedSample[] }) {
   const { t } = useLocale()
-  const [chartData, setChartData] = useState<{ ts: string; upload: number; download: number }[]>([])
-  const initialized = useRef(false)
-
+  const [metricHistory, setMetricHistory] = useState<NetworkSpeedSample[]>([])
   useEffect(() => {
-    if (!initialized.current && history.length > 0) {
-      const data = history.map((h) => {
-        const s = h.data.servers.find((s) => s.uuid === uuid)
-        if (!s) return null
-        return { ts: h.timestamp.toString(), upload: s.status.netOutSpeed / 1024 / 1024, download: s.status.netInSpeed / 1024 / 1024 }
-      }).filter(Boolean).reverse() as { ts: string; upload: number; download: number }[]
-      setChartData(data)
-      initialized.current = true
-    }
-  }, [history.length])
+    const controller = new AbortController()
+    setMetricHistory([])
+    void fetchNetworkMetricHistory(server.uuid, controller.signal)
+      .then((samples) => { if (!controller.signal.aborted) setMetricHistory(samples) })
+      .catch(() => {})
+    return () => controller.abort()
+  }, [server.uuid])
+  const samples = useMemo(() => combineNetworkHistory(metricHistory, recent, Date.now()), [metricHistory, recent])
+  const chartData = useMemo(() => buildNetworkChartData(history, server, samples), [history, server, samples])
 
-  useEffect(() => {
-    if (!initialized.current || history.length === 0) return
-    const latest = history[0]
-    const s = latest.data.servers.find((s) => s.uuid === uuid)
-    if (!s) return
-    const timestamp = Date.now().toString()
-    setChartData((prev) => {
-      let newData: { ts: string; upload: number; download: number }[]
-      if (prev.length === 0) {
-        newData = [
-          { ts: timestamp, upload: s.status.netOutSpeed / 1024 / 1024, download: s.status.netInSpeed / 1024 / 1024 },
-          { ts: timestamp, upload: s.status.netOutSpeed / 1024 / 1024, download: s.status.netInSpeed / 1024 / 1024 },
-        ]
-      } else {
-        newData = [...prev, { ts: timestamp, upload: s.status.netOutSpeed / 1024 / 1024, download: s.status.netInSpeed / 1024 / 1024 }]
-      }
-      if (newData.length > 30) newData.shift()
-      return newData
-    })
-  }, [history[0]?.timestamp])
-
-  const current = chartData.length > 0 ? chartData[chartData.length - 1] : { upload: 0, download: 0 }
+  const current = {
+    upload: server.status.netOutSpeed / 1024 / 1024,
+    download: server.status.netInSpeed / 1024 / 1024,
+  }
+  const maxDownload = getNetworkAxisMax(chartData)
   const chartConfig = { upload: { label: "Upload" }, download: { label: "Download" } } satisfies ChartConfig
 
   return (
@@ -501,18 +482,18 @@ function NetworkRealtimeChart({ uuid, history }: { uuid: string; history: Server
         <section className="flex flex-col gap-1">
           <div className="flex items-center">
             <section className="flex items-center gap-4">
-              <div className="flex w-24 flex-col">
+              <div className="flex w-20 flex-col">
                 <p className="text-muted-foreground text-xs">{t("ServerDetail", "Upload")}</p>
                 <div className="flex items-center gap-1">
                   <span className="relative inline-flex size-1.5 rounded-full bg-[hsl(var(--chart-1))]" />
-                  <p className="font-medium text-xs">{formatSpeed(current.upload * 1024 * 1024)}</p>
+                  <p className="font-medium text-xs">{current.upload.toFixed(2)} M/s</p>
                 </div>
               </div>
-              <div className="flex w-24 flex-col">
+              <div className="flex w-20 flex-col">
                 <p className="text-muted-foreground text-xs">{t("ServerDetail", "Download")}</p>
                 <div className="flex items-center gap-1">
                   <span className="relative inline-flex size-1.5 rounded-full bg-[hsl(var(--chart-4))]" />
-                  <p className="font-medium text-xs">{formatSpeed(current.download * 1024 * 1024)}</p>
+                  <p className="font-medium text-xs">{current.download.toFixed(2)} M/s</p>
                 </div>
               </div>
             </section>
@@ -521,7 +502,7 @@ function NetworkRealtimeChart({ uuid, history }: { uuid: string; history: Server
             <LineChart accessibilityLayer data={chartData} margin={{ top: 12, left: 12, right: 12 }}>
               <CartesianGrid vertical={false} />
               <XAxis dataKey="ts" tickLine={false} axisLine={false} tickMargin={8} minTickGap={200} interval="preserveStartEnd" tickFormatter={(v) => formatRelativeTime(Number(v))} />
-              <YAxis tickLine={false} axisLine={false} width={96} tickMargin={4} type="number" minTickGap={50} interval="preserveStartEnd" domain={[0, "auto"]} tickFormatter={(v) => formatChartSpeed(Number(v))} />
+              <YAxis tickLine={false} axisLine={false} mirror tickMargin={-15} type="number" minTickGap={50} interval="preserveStartEnd" domain={[1, maxDownload]} tickFormatter={(v) => `${Number(v).toFixed(0)}M/s`} />
               <Line isAnimationActive={false} dataKey="upload" type="linear" stroke="hsl(var(--chart-1))" strokeWidth={1} dot={false} />
               <Line isAnimationActive={false} dataKey="download" type="linear" stroke="hsl(var(--chart-4))" strokeWidth={1} dot={false} />
             </LineChart>
@@ -554,8 +535,9 @@ function ConnRealtimeChart({ uuid, history }: { uuid: string; history: ServerDat
     const latest = history[0]
     const s = latest.data.servers.find((s) => s.uuid === uuid)
     if (!s) return
-    const timestamp = Date.now().toString()
+    const timestamp = latest.timestamp.toString()
     setChartData((prev) => {
+      if (prev[prev.length - 1]?.ts === timestamp) return prev
       let newData: { ts: string; tcp: number; udp: number }[]
       if (prev.length === 0) {
         newData = [
@@ -634,8 +616,9 @@ function ProcessChart({ uuid, history, server }: { uuid: string; history: Server
     const latest = history[0]
     const s = latest.data.servers.find((s) => s.uuid === uuid)
     if (!s) return
-    const timestamp = Date.now().toString()
+    const timestamp = latest.timestamp.toString()
     setChartData((prev) => {
+      if (prev[prev.length - 1]?.ts === timestamp) return prev
       let newData: { ts: string; v: number }[]
       if (prev.length === 0) {
         newData = [
@@ -769,7 +752,7 @@ interface PingChartData {
 
 interface PingTaskChartPoint extends PingChartData {
   avg_delay: number | null
-  packet_loss: number
+  packet_loss: number | null
 }
 
 const pingDataKey = (taskId: string) => `ping_${taskId}`
@@ -803,64 +786,83 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
   useEffect(() => {
     let cancelled = false
     const controller = new AbortController()
+    let currentData: KomariPingChartData | null = null
+    let refreshTimer: ReturnType<typeof setInterval> | undefined
+    let refreshCount = 0
+    let refreshing = false
     setActiveChart("All")
+    const showData = (data: KomariPingChartData) => {
+      currentData = data
+      setTasks(data.tasks)
+      const byTask: Record<string, PingTaskChartPoint[]> = {}
+      const loadedTaskMap = new Map(data.tasks.map((task) => [task.id, task]))
+
+      for (const task of data.tasks) {
+        byTask[task.id] = []
+      }
+
+      for (const point of data.points) {
+        const task = loadedTaskMap.get(point.taskId)
+        if (!task) continue
+        byTask[task.id].push({
+          created_at: Date.parse(point.time),
+          avg_delay: point.value,
+          packet_loss: point.loss,
+        })
+      }
+
+      for (const key of Object.keys(byTask)) {
+        byTask[key].sort((a, b) => a.created_at - b.created_at)
+      }
+
+      setChartData(byTask)
+
+      const merged = new Map<number, PingChartData>()
+      for (const [taskId, records] of Object.entries(byTask)) {
+        for (const record of records) {
+          const point = merged.get(record.created_at) ?? { created_at: record.created_at }
+          point[pingDataKey(taskId)] = record.avg_delay
+          merged.set(record.created_at, point)
+        }
+      }
+      setFormattedData([...merged.values()].sort((a, b) => a.created_at - b.created_at))
+    }
     const load = async () => {
       try {
         setLoading(true)
         setError(null)
-        const data = await fetchPingChartData(uuid, 48, controller.signal)
+        const data = await fetchPingChartData(uuid, 24, controller.signal)
         if (cancelled) return
-
-        if (data.tasks.length === 0) {
-          setTasks([])
-          setChartData({})
-          setFormattedData([])
+        if (data.tasks.length === 0 || data.points.length === 0) {
           setError("no_data")
           setLoading(false)
           return
         }
-
-        setTasks(data.tasks)
-        const byTask: Record<string, PingTaskChartPoint[]> = {}
-        const loadedTaskMap = new Map(data.tasks.map((task) => [task.id, task]))
-
-        for (const task of data.tasks) {
-          byTask[task.id] = []
-        }
-
-        for (const point of data.points) {
-          const task = loadedTaskMap.get(point.taskId)
-          if (!task) continue
-          byTask[task.id].push({
-            created_at: new Date(point.time).getTime(),
-            avg_delay: point.value,
-            packet_loss: task.loss,
-          })
-        }
-
-        // Sort each task's data by time
-        for (const key of Object.keys(byTask)) {
-          byTask[key].sort((a, b) => a.created_at - b.created_at)
-        }
-
-        setChartData(byTask)
-
-        // Build merged data for "All" view
-        const allTimes = new Set<number>()
-        for (const records of Object.values(byTask)) {
-          for (const r of records) allTimes.add(r.created_at)
-        }
-        const sortedTimes = Array.from(allTimes).sort((a, b) => a - b)
-        const merged: PingChartData[] = sortedTimes.map((time) => {
-          const point: PingChartData = { created_at: time }
-          for (const [taskId, records] of Object.entries(byTask)) {
-            const rec = records.find((r) => r.created_at === time)
-            point[pingDataKey(taskId)] = rec?.avg_delay ?? null
-          }
-          return point
-        })
-        setFormattedData(merged)
+        showData(data)
         setLoading(false)
+        refreshTimer = setInterval(() => {
+          if (refreshing || cancelled || !currentData) return
+          refreshing = true
+          const refresh = async () => {
+            try {
+              refreshCount++
+              if (refreshCount % 20 === 0) {
+                const next = await fetchPingChartData(uuid, 24, controller.signal)
+                if (!cancelled && next.points.length > 0) showData(next)
+              } else {
+                const recent = await fetchRecentPingChartPoints(uuid, 1, controller.signal)
+                if (!cancelled && recent.length > 0 && currentData) {
+                  showData({ ...currentData, points: mergePingPoints(currentData.points, recent) })
+                }
+              }
+            } catch {
+              // Keep the last known chart when a refresh fails.
+            } finally {
+              refreshing = false
+            }
+          }
+          void refresh()
+        }, 15_000)
       } catch {
         if (!cancelled) {
           setError("fetch_error")
@@ -871,86 +873,17 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
     void load()
     return () => {
       cancelled = true
+      if (refreshTimer) clearInterval(refreshTimer)
       controller.abort()
     }
   }, [uuid])
 
   const rawDisplayData = activeChart === "All" ? formattedData : (chartData[activeChart] || [])
 
-  // Peak Cut (EWMA smoothing) processing
-  const displayData = useMemo(() => {
-    if (!isPeakEnabled) return rawDisplayData
-
-    const data = rawDisplayData as PingChartData[]
-    const windowSize = 11
-    const alpha = 0.3
-
-    const getMedian = (arr: number[]) => {
-      const sorted = [...arr].sort((a, b) => a - b)
-      const mid = Math.floor(sorted.length / 2)
-      return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
-    }
-
-    const processValues = (values: number[]) => {
-      if (values.length === 0) return null
-      const median = getMedian(values)
-      const deviations = values.map((v) => Math.abs(v - median))
-      const medianDeviation = getMedian(deviations) * 1.4826
-      const validValues = values.filter(
-        (v) => Math.abs(v - median) <= 3 * medianDeviation && v <= median * 3,
-      )
-      if (validValues.length === 0) return median
-      let ewma = validValues[0]
-      for (let i = 1; i < validValues.length; i++) {
-        ewma = alpha * validValues[i] + (1 - alpha) * ewma
-      }
-      return ewma
-    }
-
-    const ewmaHistory: { [key: string]: number } = {}
-
-    return data.map((point, index) => {
-      if (index < windowSize - 1) return point
-      const window = data.slice(index - windowSize + 1, index + 1)
-      const smoothed = { ...point } as PingChartData
-
-      if (activeChart === "All") {
-        for (const taskId of taskIds) {
-          const key = pingDataKey(taskId)
-          const values = window
-            .map((w) => w[key])
-            .filter((v) => v !== undefined && v !== null) as number[]
-          if (values.length > 0) {
-            const processed = processValues(values)
-            if (processed !== null) {
-              if (ewmaHistory[key] === undefined) {
-                ewmaHistory[key] = processed
-              } else {
-                ewmaHistory[key] = alpha * processed + (1 - alpha) * ewmaHistory[key]
-              }
-              smoothed[key] = ewmaHistory[key]
-            }
-          }
-        }
-      } else {
-        const values = window
-          .map((w) => (w as any).avg_delay)
-          .filter((v: any) => v !== undefined && v !== null) as number[]
-        if (values.length > 0) {
-          const processed = processValues(values)
-          if (processed !== null) {
-            if (ewmaHistory.current === undefined) {
-              ewmaHistory.current = processed
-            } else {
-              ewmaHistory.current = alpha * processed + (1 - alpha) * ewmaHistory.current
-            }
-            ;(smoothed as any).avg_delay = ewmaHistory.current
-          }
-        }
-      }
-      return smoothed
-    })
-  }, [isPeakEnabled, activeChart, rawDisplayData, taskIds])
+  const displayData = useMemo(
+    () => isPeakEnabled ? smoothPingChartData(rawDisplayData, activeChart, taskIds) : rawDisplayData,
+    [isPeakEnabled, activeChart, rawDisplayData, taskIds],
+  )
 
   if (loading) {
     return (
@@ -1022,17 +955,7 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
                   <div className="flex items-center gap-2 text-[10px]">
                     <span className="text-green-500">↓{minDelay.toFixed(0)}</span>
                     <span className="text-red-500">↑{maxDelay.toFixed(0)}</span>
-                    {data.some((item) => item.packet_loss !== undefined) && (
-                      <span className="text-muted-foreground">
-                        {(
-                          data
-                            .filter((item) => item.packet_loss !== undefined)
-                            .reduce((sum, item) => sum + (item.packet_loss ?? 0), 0) /
-                          data.filter((item) => item.packet_loss !== undefined).length
-                        ).toFixed(2)}
-                        %
-                      </span>
-                    )}
+                    <span className="text-muted-foreground">{(task?.loss ?? 0).toFixed(2)} %</span>
                   </div>
                 </div>
               </button>
@@ -1046,23 +969,15 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
             <CartesianGrid vertical={false} />
             <XAxis
               dataKey="created_at"
+              type="number"
+              scale="time"
+              domain={["dataMin", "dataMax"]}
               tickLine={true}
               tickSize={3}
               axisLine={false}
               tickMargin={8}
               minTickGap={80}
-              ticks={(displayData as any[])
-                .filter((item: any, index: number, array: any[]) => {
-                  if (array.length < 6) return index === 0 || index === array.length - 1
-                  const timeSpan = array[array.length - 1].created_at - array[0].created_at
-                  const hours = timeSpan / (1000 * 60 * 60)
-                  if (hours <= 12) {
-                    return index === 0 || index === array.length - 1 || new Date(item.created_at).getMinutes() % 60 === 0
-                  }
-                  const date = new Date(item.created_at)
-                  return date.getMinutes() === 0 && date.getHours() % 2 === 0
-                })
-                .map((item: any) => item.created_at)}
+              ticks={getPingChartTicks(displayData)}
               tickFormatter={(value) => {
                 const date = new Date(value)
                 const minutes = date.getMinutes()
@@ -1216,14 +1131,14 @@ function ServerDetailSummary({ server }: { server: ServerInfo }) {
           <span className="font-medium text-[10px]">{server.status.udpConn}</span>
         </section>
       </section>
-      <section className="flex min-w-[150px] flex-col justify-center gap-0.5 px-1.5 py-1">
+      <section className="flex min-w-[120px] flex-col justify-center gap-0.5 px-1.5 py-1">
         <section className="flex items-center justify-between gap-4">
           <span className="text-[10px] text-muted-foreground">Upload</span>
-          <span className="font-medium text-[10px]">{formatSpeed(server.status.netOutSpeed)}</span>
+          <span className="font-medium text-[10px]">{(server.status.netOutSpeed / 1024 / 1024).toFixed(2)}M/s</span>
         </section>
         <section className="flex items-center justify-between gap-4">
           <span className="text-[10px] text-muted-foreground">Download</span>
-          <span className="font-medium text-[10px]">{formatSpeed(server.status.netInSpeed)}</span>
+          <span className="font-medium text-[10px]">{(server.status.netInSpeed / 1024 / 1024).toFixed(2)}M/s</span>
         </section>
       </section>
     </div>
