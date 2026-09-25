@@ -469,11 +469,7 @@ function NetworkRealtimeChart({ server, history, recent }: { server: ServerInfo;
   const samples = useMemo(() => combineNetworkHistory(metricHistory, recent, Date.now()), [metricHistory, recent])
   const chartData = useMemo(() => buildNetworkChartData(history, server, samples), [history, server, samples])
 
-  const current = {
-    upload: server.status.netOutSpeed / 1024 / 1024,
-    download: server.status.netInSpeed / 1024 / 1024,
-  }
-  const maxDownload = getNetworkAxisMax(chartData)
+  const axisMax = getNetworkAxisMax(chartData)
   const chartConfig = { upload: { label: "Upload" }, download: { label: "Download" } } satisfies ChartConfig
 
   return (
@@ -486,14 +482,14 @@ function NetworkRealtimeChart({ server, history, recent }: { server: ServerInfo;
                 <p className="text-muted-foreground text-xs">{t("ServerDetail", "Upload")}</p>
                 <div className="flex items-center gap-1">
                   <span className="relative inline-flex size-1.5 rounded-full bg-[hsl(var(--chart-1))]" />
-                  <p className="font-medium text-xs">{current.upload.toFixed(2)} M/s</p>
+                  <p className="font-medium text-xs">{(server.status.netOutSpeed / 1024 / 1024).toFixed(2)} M/s</p>
                 </div>
               </div>
               <div className="flex w-20 flex-col">
                 <p className="text-muted-foreground text-xs">{t("ServerDetail", "Download")}</p>
                 <div className="flex items-center gap-1">
                   <span className="relative inline-flex size-1.5 rounded-full bg-[hsl(var(--chart-4))]" />
-                  <p className="font-medium text-xs">{current.download.toFixed(2)} M/s</p>
+                  <p className="font-medium text-xs">{(server.status.netInSpeed / 1024 / 1024).toFixed(2)} M/s</p>
                 </div>
               </div>
             </section>
@@ -502,7 +498,7 @@ function NetworkRealtimeChart({ server, history, recent }: { server: ServerInfo;
             <LineChart accessibilityLayer data={chartData} margin={{ top: 12, left: 12, right: 12 }}>
               <CartesianGrid vertical={false} />
               <XAxis dataKey="ts" tickLine={false} axisLine={false} tickMargin={8} minTickGap={200} interval="preserveStartEnd" tickFormatter={(v) => formatRelativeTime(Number(v))} />
-              <YAxis tickLine={false} axisLine={false} mirror tickMargin={-15} type="number" minTickGap={50} interval="preserveStartEnd" domain={[1, maxDownload]} tickFormatter={(v) => `${Number(v).toFixed(0)}M/s`} />
+              <YAxis tickLine={false} axisLine={false} mirror tickMargin={-15} type="number" ticks={[0, axisMax]} domain={[0, axisMax]} tickFormatter={(v) => `${Number(v).toFixed(0)}M/s`} />
               <Line isAnimationActive={false} dataKey="upload" type="linear" stroke="hsl(var(--chart-1))" strokeWidth={1} dot={false} />
               <Line isAnimationActive={false} dataKey="download" type="linear" stroke="hsl(var(--chart-4))" strokeWidth={1} dot={false} />
             </LineChart>
@@ -722,6 +718,17 @@ function DetailTabSwitch({ currentTab, setCurrentTab, locale }: { currentTab: st
 }
 
 /* ── Network Ping Error Boundary ── */
+function NetworkPingError({ message }: { message: string }) {
+  const { t } = useLocale()
+  return (
+    <div className="flex flex-col items-center justify-center p-8">
+      <p className="mb-2 font-medium text-lg">{t("ServerDetail", "networkUnavailable")}</p>
+      <p className="text-muted-foreground text-sm">{t("ServerDetail", "networkLoadError")}</p>
+      <p className="mt-2 text-muted-foreground text-xs">{message}</p>
+    </div>
+  )
+}
+
 class NetworkPingErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; errorMsg: string }> {
   constructor(props: { children: ReactNode }) {
     super(props)
@@ -732,13 +739,7 @@ class NetworkPingErrorBoundary extends Component<{ children: ReactNode }, { hasE
   }
   render() {
     if (this.state.hasError) {
-      return (
-        <div className="flex flex-col items-center justify-center p-8">
-          <p className="mb-2 font-medium text-lg">网络延迟图表不可用</p>
-          <p className="text-muted-foreground text-sm">加载图表时发生错误。</p>
-          <p className="mt-2 text-muted-foreground text-xs">{this.state.errorMsg}</p>
-        </div>
-      )
+      return <NetworkPingError message={this.state.errorMsg} />
     }
     return this.props.children
   }

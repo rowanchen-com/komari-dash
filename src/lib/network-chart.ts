@@ -54,44 +54,27 @@ export interface NetworkChartPoint {
 }
 
 export function getNetworkAxisMax(points: readonly NetworkChartPoint[]): number {
-  let maxDownload = Math.max(...points.map((point) => point.download))
-  maxDownload = Math.ceil(maxDownload)
-  if (maxDownload < 1) maxDownload = 1
-  return maxDownload
+  const peak = Math.max(0, ...points.flatMap((point) => [point.upload, point.download]))
+  return Math.max(1, Math.ceil(peak))
 }
 
 type CurrentNetworkServer = NetworkSnapshot["data"]["servers"][number]
 
 export function buildNetworkChartData(history: readonly NetworkSnapshot[], current: CurrentNetworkServer, recent: readonly NetworkSpeedSample[] = []): NetworkChartPoint[] {
   if (recent.length > 0) {
-    const lastTimestamp = recent[recent.length - 1].timestamp
-    const now = Date.now()
     return recent.map((sample) => ({
-      ts: (now - (lastTimestamp - sample.timestamp)).toString(),
+      ts: sample.timestamp.toString(),
       upload: sample.up / 1024 / 1024,
       download: sample.down / 1024 / 1024,
     }))
   }
 
-  const points = history.flatMap((snapshot) => {
+  return history.flatMap((snapshot) => {
     const server = snapshot.data.servers.find((item) => item.uuid === current.uuid)
     return server ? [{
       ts: snapshot.timestamp.toString(),
       upload: server.status.netOutSpeed / 1024 / 1024,
       download: server.status.netInSpeed / 1024 / 1024,
     }] : []
-  }).reverse()
-
-  const currentPoint = {
-    ts: Date.now().toString(),
-    upload: current.status.netOutSpeed / 1024 / 1024,
-    download: current.status.netInSpeed / 1024 / 1024,
-  }
-  if (points.length === 0) return [currentPoint, currentPoint]
-
-  const latest = points[points.length - 1]
-  if (latest.upload === currentPoint.upload && latest.download === currentPoint.download) {
-    return points.slice(-30)
-  }
-  return [...points, currentPoint].slice(-30)
+  }).reverse().slice(-30)
 }

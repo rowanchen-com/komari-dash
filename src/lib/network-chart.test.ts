@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 import { buildNetworkChartData, combineNetworkHistory, getNetworkAxisMax, mergeNetworkHistories } from "@/lib/network-chart"
 
 describe("buildNetworkChartData", () => {
@@ -13,7 +13,7 @@ describe("buildNetworkChartData", () => {
     ] } },
   ]
 
-  it("keeps chronological MiB rates and upload/download direction", () => {
+  it("keeps chronological, unrounded M/s rates and upload/download direction", () => {
     expect(buildNetworkChartData(history, history[0].data.servers[0])).toEqual([
       { ts: "2000", upload: 200 / MiB, download: 20 / MiB },
       { ts: "3000", upload: 300 / MiB, download: 30 / MiB },
@@ -26,32 +26,22 @@ describe("buildNetworkChartData", () => {
     ])
   })
 
-  it("adds the current reading only when it differs from the last snapshot", () => {
-    const now = vi.spyOn(Date, "now").mockReturnValue(4000)
-    try {
-      const current = { uuid: "a", status: { netOutSpeed: 400, netInSpeed: 40 } }
-      expect(buildNetworkChartData(history, current)).toEqual([
-        { ts: "2000", upload: 200 / MiB, download: 20 / MiB },
-        { ts: "3000", upload: 300 / MiB, download: 30 / MiB },
-        { ts: "4000", upload: 400 / MiB, download: 40 / MiB },
-      ])
-    } finally {
-      now.mockRestore()
-    }
+  it("does not invent a timestamp when a reading changes", () => {
+    const current = { uuid: "a", status: { netOutSpeed: 400, netInSpeed: 40 } }
+    expect(buildNetworkChartData(history, current)).toHaveLength(2)
   })
 
-  it("preserves byte-per-second to M/s conversion before the original two-decimal label", () => {
-    const current = { uuid: "a", status: { netOutSpeed: 31457.28, netInSpeed: 10485.76 } }
-    const [point] = buildNetworkChartData([], current)
-    expect(point.upload.toFixed(2)).toBe("0.03")
-    expect(point.download.toFixed(2)).toBe("0.01")
+  it("plots sub-0.01 M/s traffic even when the header rounds to 0.00 M/s", () => {
+    const current = { uuid: "a", status: { netOutSpeed: 1024, netInSpeed: 2048 } }
+    const [point] = buildNetworkChartData([], current, [{ timestamp: 4000, up: 1024, down: 2048 }])
+    expect(point.upload.toFixed(2)).toBe("0.00")
+    expect(point.upload).toBeGreaterThan(0)
+    expect(point.download).toBeGreaterThan(point.upload)
   })
 
   it("plots the recent one-minute samples instead of duplicating a delayed reading", () => {
-    const now = vi.spyOn(Date, "now").mockReturnValue(100000)
-    try {
-      const current = { uuid: "a", status: { netOutSpeed: 10, netInSpeed: 20 } }
-      expect(buildNetworkChartData([], current, [
+    const current = { uuid: "a", status: { netOutSpeed: 10, netInSpeed: 20 } }
+    expect(buildNetworkChartData([], current, [
         { timestamp: 40000, up: 0, down: 0 },
         { timestamp: 70000, up: MiB, down: 2 * MiB },
         { timestamp: 100000, up: 0, down: 0 },
@@ -60,9 +50,6 @@ describe("buildNetworkChartData", () => {
         { ts: "70000", upload: 1, download: 2 },
         { ts: "100000", upload: 0, download: 0 },
       ])
-    } finally {
-      now.mockRestore()
-    }
   })
 
   it("accumulates distinct samples across polls for fifteen minutes", () => {
@@ -91,8 +78,9 @@ describe("buildNetworkChartData", () => {
     ])
   })
 
-  it("matches the original download-based dynamic axis", () => {
-    expect(getNetworkAxisMax([{ ts: "0", upload: 3, download: 0.05 }])).toBe(1)
+  it("keeps the original whole-M axis while containing upload and download peaks", () => {
+    expect(getNetworkAxisMax([{ ts: "0", upload: 0.03, download: 0.01 }])).toBe(1)
+    expect(getNetworkAxisMax([{ ts: "0", upload: 3.01, download: 0.01 }])).toBe(4)
     expect(getNetworkAxisMax([{ ts: "0", upload: 0, download: 2.85 }])).toBe(3)
     expect(getNetworkAxisMax([])).toBe(1)
   })

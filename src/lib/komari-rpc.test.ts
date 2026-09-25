@@ -90,6 +90,28 @@ describe("Komari 1.5.0 RPC2 adapters", () => {
     }
   })
 
+  it("does not let an older or same-time recent sample replace the RPC rate", async () => {
+    const nodes = normalizeNodes(nodeResponse)
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
+      status: "success",
+      data: [{ updated_at: "2026-09-24T20:00:04Z", network: { up: 100, down: 200 } }],
+    })))
+    vi.stubGlobal("fetch", fetchMock)
+    try {
+      for (const time of ["2026-09-24T20:00:04Z", "2026-09-24T20:00:08Z"]) {
+        const statuses = normalizeLatestStatuses({
+          "node-1": { client: "node-1", time, online: true, net_in: 11, net_out: 12 },
+        })
+        const result = await fetchRecentNetworkData(nodes, statuses)
+        expect(result.statuses["node-1"].net_out).toBe(12)
+        expect(result.statuses["node-1"].net_in).toBe(11)
+        expect(result.history["node-1"]).toHaveLength(1)
+      }
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it("keeps RPC speeds when recent data fails and skips offline nodes", async () => {
     const nodes = normalizeNodes({
       ...nodeResponse,

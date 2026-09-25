@@ -10,7 +10,7 @@ import {
 import { cn } from "@/lib/utils"
 
 export default function LanguageSwitcher() {
-  const { locale, setLocale } = useLocale()
+  const { locale, setLocale, t } = useLocale()
 
   const handleSelect = (e: Event, newLocale: string) => {
     e.preventDefault()
@@ -24,14 +24,14 @@ export default function LanguageSwitcher() {
           variant="outline"
           size="sm"
           className="cursor-pointer rounded-full bg-white px-[9px] hover:bg-accent/50 dark:bg-black dark:hover:bg-accent/50"
-          title="Change language"
+          title={t("LanguageSwitcher", "title")}
         >
           <LanguageIcon className="size-4" />
-          <span className="sr-only">Change language</span>
+          <span className="sr-only">{t("LanguageSwitcher", "title")}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        className="flex w-28 flex-col gap-0.5 border-none shadow-md shadow-stone-200/50 ring ring-stone-200 dark:shadow-none dark:ring-stone-800"
+        className="flex w-44 flex-col gap-0.5 border-none shadow-md shadow-stone-200/50 ring ring-stone-200 dark:shadow-none dark:ring-stone-800"
         align="end"
       >
         {localeItems.map((item, index) => (

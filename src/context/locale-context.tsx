@@ -2,12 +2,13 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 
 export const localeItems = [
   { code: "en", name: "English" },
+  { code: "id", name: "Bahasa Indonesia" },
   { code: "ja", name: "日本語" },
   { code: "zh-TW", name: "中文繁體" },
   { code: "zh", name: "中文简体" },
 ]
 
-const messages: Record<string, Record<string, Record<string, string>>> = {
+export const messages: Record<string, Record<string, Record<string, string>>> = {
   zh: {
     Overview: { title: "概览", time: "当前时间" },
     ServerOverview: {
@@ -28,12 +29,14 @@ const messages: Record<string, Record<string, Record<string, string>>> = {
       tabDetail: "详情", tabNetwork: "网络",
       networkUnavailable: "网络延迟图表不可用",
       networkUnavailableDesc: "该节点暂无 Ping 监控任务数据。",
+      networkLoadError: "加载图表时发生错误。",
       LastActive: "最后上报时间", BootTime: "启动时间",
       Days: "天", Hours: "小时",
       monitorCount: "个监控任务", avgDelay: "平均延迟", packetLoss: "丢包率",
       peak_cut: "削峰",
     },
-    ThemeSwitcher: { Light: "亮色", Dark: "暗色", System: "系统" },
+    ThemeSwitcher: { Light: "亮色", Dark: "暗色", System: "系统", title: "切换主题" },
+    LanguageSwitcher: { title: "切换语言" },
     DashCommand: {
       TypeCommand: "输入命令或搜索...", NoResults: "没有找到结果。",
       Servers: "服务器", Shortcuts: "快捷操作",
@@ -65,12 +68,14 @@ const messages: Record<string, Record<string, Record<string, string>>> = {
       tabDetail: "Detail", tabNetwork: "Network",
       networkUnavailable: "Network latency chart unavailable",
       networkUnavailableDesc: "No ping monitor task data available for this node.",
+      networkLoadError: "An error occurred while loading the chart.",
       LastActive: "Last Active", BootTime: "Boot Time",
       Days: "Days", Hours: "Hours",
       monitorCount: "Monitor Tasks", avgDelay: "Avg Delay", packetLoss: "Packet Loss",
       peak_cut: "Peak cut",
     },
-    ThemeSwitcher: { Light: "Light", Dark: "Dark", System: "System" },
+    ThemeSwitcher: { Light: "Light", Dark: "Dark", System: "System", title: "Change theme" },
+    LanguageSwitcher: { title: "Change language" },
     DashCommand: {
       TypeCommand: "Type a command or search...", NoResults: "No results found.",
       Servers: "Servers", Shortcuts: "Shortcuts",
@@ -81,6 +86,44 @@ const messages: Record<string, Record<string, Record<string, string>>> = {
     Header: { desc: "Simple and beautiful dashboard" },
     NotFound: { title: "Page Not Found", back: "Back to Home" },
     Global: { distributions: "Distributed in", regions: "regions", servers: "Servers" },
+  },
+  id: {
+    Overview: { title: "Ikhtisar", time: "Waktu saat ini" },
+    ServerOverview: {
+      total: "Total Server", online: "Server Online", offline: "Server Offline",
+      network: "Jaringan", error: "Periksa koneksi server",
+    },
+    ServerList: { connecting: "Menghubungkan", error: "Periksa koneksi server", defaultTag: "Semua" },
+    ServerCard: {
+      CPU: "CPU", Mem: "Memori", STG: "Penyimpanan", Upload: "Unggah", Download: "Unduh",
+      System: "Sistem", Uptime: "Waktu aktif", TotalUpload: "Total unggahan", TotalDownload: "Total unduhan",
+    },
+    ServerDetail: {
+      status: "Status", Online: "Online", Offline: "Offline", Uptime: "Waktu aktif",
+      Arch: "Arsitektur", Mem: "Memori", Disk: "Disk", Region: "Wilayah",
+      Version: "Versi", System: "Sistem", CPU: "CPU", Upload: "Unggah", Download: "Unduh",
+      Load: "Beban", Process: "Proses", Swap: "Memori swap", error: "Gagal mengambil detail server",
+      tabDetail: "Detail", tabNetwork: "Jaringan",
+      networkUnavailable: "Grafik latensi jaringan tidak tersedia",
+      networkUnavailableDesc: "Belum ada data pemantauan Ping untuk server ini.",
+      networkLoadError: "Terjadi kesalahan saat memuat grafik.",
+      LastActive: "Terakhir aktif", BootTime: "Waktu mulai",
+      Days: "hari", Hours: "jam",
+      monitorCount: "tugas pemantauan", avgDelay: "Latensi rata-rata", packetLoss: "Kehilangan paket",
+      peak_cut: "Pangkas puncak",
+    },
+    ThemeSwitcher: { Light: "Terang", Dark: "Gelap", System: "Sistem", title: "Ubah tema" },
+    LanguageSwitcher: { title: "Ubah bahasa" },
+    DashCommand: {
+      TypeCommand: "Ketik perintah atau cari...", NoResults: "Tidak ada hasil.",
+      Servers: "Server", Shortcuts: "Pintasan",
+      ToggleLightMode: "Beralih ke mode terang", ToggleDarkMode: "Beralih ke mode gelap",
+      ToggleSystemMode: "Beralih ke mode sistem", Home: "Beranda",
+    },
+    Footer: { code: "Kode sumber tersedia di", copyright: "©" },
+    Header: { desc: "Dasbor pemantauan yang sederhana dan indah" },
+    NotFound: { title: "Halaman tidak ditemukan", back: "Kembali ke beranda" },
+    Global: { distributions: "Server tersebar di", regions: "wilayah", servers: "server" },
   },
   ja: {
     Overview: { title: "概要", time: "現在時刻" },
@@ -102,12 +145,14 @@ const messages: Record<string, Record<string, Record<string, string>>> = {
       tabDetail: "詳細", tabNetwork: "ネットワーク",
       networkUnavailable: "ネットワーク遅延チャートは利用できません",
       networkUnavailableDesc: "このノードにはPing監視タスクデータがありません。",
+      networkLoadError: "チャートの読み込み中にエラーが発生しました。",
       LastActive: "最終アクティブ", BootTime: "起動時間",
       Days: "日", Hours: "時間",
       monitorCount: "個の監視タスク", avgDelay: "平均遅延", packetLoss: "パケットロス",
       peak_cut: "ピークカット",
     },
-    ThemeSwitcher: { Light: "ライト", Dark: "ダーク", System: "システム" },
+    ThemeSwitcher: { Light: "ライト", Dark: "ダーク", System: "システム", title: "テーマを変更" },
+    LanguageSwitcher: { title: "言語を変更" },
     DashCommand: {
       TypeCommand: "コマンドまたは検索...", NoResults: "結果が見つかりません。",
       Servers: "サーバー", Shortcuts: "ショートカット",
@@ -139,12 +184,14 @@ const messages: Record<string, Record<string, Record<string, string>>> = {
       tabDetail: "詳情", tabNetwork: "網路",
       networkUnavailable: "網路延遲圖表不可用",
       networkUnavailableDesc: "該節點暫無 Ping 監控任務資料。",
+      networkLoadError: "載入圖表時發生錯誤。",
       LastActive: "最後上報時間", BootTime: "啟動時間",
       Days: "天", Hours: "小時",
       monitorCount: "個監控任務", avgDelay: "平均延遲", packetLoss: "丟包率",
       peak_cut: "削峰",
     },
-    ThemeSwitcher: { Light: "亮色", Dark: "暗色", System: "系統" },
+    ThemeSwitcher: { Light: "亮色", Dark: "暗色", System: "系統", title: "切換主題" },
+    LanguageSwitcher: { title: "切換語言" },
     DashCommand: {
       TypeCommand: "輸入命令或搜尋...", NoResults: "沒有找到結果。",
       Servers: "伺服器", Shortcuts: "快捷操作",
@@ -174,12 +221,14 @@ function detectLang(): string {
   if (/^zh-(tw|hk|mo|hant)/.test(normalized)) return "zh-TW"
   if (normalized.startsWith("zh")) return "zh"
   if (normalized.startsWith("ja")) return "ja"
+  if (normalized.startsWith("id")) return "id"
   return "en"
 }
 
 function writeLanguagePreference(language: string) {
   const officialCode = {
     en: "en-US",
+    id: "id-ID",
     ja: "ja-JP",
     zh: "zh-CN",
     "zh-TW": "zh-TW",

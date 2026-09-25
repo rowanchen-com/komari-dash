@@ -1,21 +1,57 @@
 {
   "name": "Komari Dash",
   "short": "KomariDash",
-  "description": "A beautiful server monitoring dashboard theme for Komari, ported from NezhaDash",
+  "description": {
+    "en": "A beautiful server monitoring dashboard theme for Komari, ported from NezhaDash",
+    "id": "Tema dasbor pemantauan server untuk Komari, diadaptasi dari NezhaDash",
+    "ja": "NezhaDash から移植された Komari 用の美しいサーバー監視ダッシュボードテーマ",
+    "zh-CN": "从 NezhaDash 移植的简洁美观的 Komari 服务器监控主题",
+    "zh-TW": "從 NezhaDash 移植的簡潔美觀的 Komari 伺服器監控主題"
+  },
   "version": "3.1.12",
   "author": "rowanchen-com",
   "url": "https://github.com/rowanchen-com/komari-dash",
   "preview": "preview.png",
   "configuration": {
     "type": "managed",
-    "name": "KomariDash Settings",
+    "name": {
+      "en": "KomariDash Settings",
+      "id": "Pengaturan KomariDash",
+      "ja": "KomariDash の設定",
+      "zh-CN": "KomariDash 设置",
+      "zh-TW": "KomariDash 設定"
+    },
     "data": [
-      { "key": "showFlag", "name": "显示国旗", "type": "switch", "default": true, "help": "在服务器卡片上显示国旗图标" },
-      { "key": "showTag", "name": "显示分组标签", "type": "switch", "default": true, "help": "显示服务器分组标签筛选" },
-      { "key": "showNetTransfer", "name": "显示流量统计", "type": "switch", "default": false, "help": "在服务器卡片上显示总上传/下载流量" },
-      { "key": "disableCartoon", "name": "禁用卡通图标", "type": "switch", "default": false, "help": "隐藏网络卡片上的卡通图标" },
-      { "key": "fixedTopServerName", "name": "固定顶部服务器名", "type": "switch", "default": false, "help": "将服务器名称固定在卡片顶部" },
-      { "key": "showTagCount", "name": "显示分组数量", "type": "switch", "default": false, "help": "在分组标签旁显示服务器数量" }
+      {
+        "key": "showFlag", "type": "switch", "default": true,
+        "name": { "en": "Show country flags", "id": "Tampilkan bendera negara", "ja": "国旗を表示", "zh-CN": "显示国旗", "zh-TW": "顯示國旗" },
+        "help": { "en": "Show country flags on server cards", "id": "Tampilkan bendera negara pada kartu server", "ja": "サーバーカードに国旗を表示します", "zh-CN": "在服务器卡片上显示国旗图标", "zh-TW": "在伺服器卡片上顯示國旗圖示" }
+      },
+      {
+        "key": "showTag", "type": "switch", "default": true,
+        "name": { "en": "Show group tags", "id": "Tampilkan tag grup", "ja": "グループタグを表示", "zh-CN": "显示分组标签", "zh-TW": "顯示分組標籤" },
+        "help": { "en": "Show filters for server group tags", "id": "Tampilkan filter tag grup server", "ja": "サーバーグループのタグフィルターを表示します", "zh-CN": "显示服务器分组标签筛选", "zh-TW": "顯示伺服器分組標籤篩選" }
+      },
+      {
+        "key": "showNetTransfer", "type": "switch", "default": false,
+        "name": { "en": "Show traffic totals", "id": "Tampilkan total lalu lintas", "ja": "通信量の合計を表示", "zh-CN": "显示流量统计", "zh-TW": "顯示流量統計" },
+        "help": { "en": "Show total uploaded and downloaded data on server cards", "id": "Tampilkan total data yang diunggah dan diunduh pada kartu server", "ja": "サーバーカードにアップロードとダウンロードの合計を表示します", "zh-CN": "在服务器卡片上显示总上传/下载流量", "zh-TW": "在伺服器卡片上顯示上傳／下載總流量" }
+      },
+      {
+        "key": "disableCartoon", "type": "switch", "default": false,
+        "name": { "en": "Hide cartoon icon", "id": "Sembunyikan ikon ilustrasi", "ja": "イラストを非表示", "zh-CN": "禁用卡通图标", "zh-TW": "停用卡通圖示" },
+        "help": { "en": "Hide the illustration on the network card", "id": "Sembunyikan ilustrasi pada kartu jaringan", "ja": "ネットワークカードのイラストを非表示にします", "zh-CN": "隐藏网络卡片上的卡通图标", "zh-TW": "隱藏網路卡片上的卡通圖示" }
+      },
+      {
+        "key": "fixedTopServerName", "type": "switch", "default": false,
+        "name": { "en": "Keep server names at top", "id": "Tetapkan nama server di atas", "ja": "サーバー名を上部に固定", "zh-CN": "固定顶部服务器名", "zh-TW": "固定頂部伺服器名稱" },
+        "help": { "en": "Keep the server name at the top of each card", "id": "Tetapkan nama server di bagian atas setiap kartu", "ja": "各カードの上部にサーバー名を固定します", "zh-CN": "将服务器名称固定在卡片顶部", "zh-TW": "將伺服器名稱固定在卡片頂部" }
+      },
+      {
+        "key": "showTagCount", "type": "switch", "default": false,
+        "name": { "en": "Show group counts", "id": "Tampilkan jumlah server per grup", "ja": "グループ内のサーバー数を表示", "zh-CN": "显示分组数量", "zh-TW": "顯示分組數量" },
+        "help": { "en": "Show server counts beside group tags", "id": "Tampilkan jumlah server di samping tag grup", "ja": "グループタグの横にサーバー数を表示します", "zh-CN": "在分组标签旁显示服务器数量", "zh-TW": "在分組標籤旁顯示伺服器數量" }
+      }
     ]
   }
 }

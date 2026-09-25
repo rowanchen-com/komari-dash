@@ -219,7 +219,7 @@ function recentNetwork(value: unknown): NetworkSpeedSample[] {
     if (!isRecord(entry) || !isRecord(entry.network)) return []
     const { up, down } = entry.network
     const timestamp = Date.parse(asString(entry.updated_at))
-    if (!Number.isFinite(timestamp) || typeof up !== "number" || !Number.isFinite(up) || typeof down !== "number" || !Number.isFinite(down)) return []
+    if (!Number.isFinite(timestamp) || typeof up !== "number" || !Number.isFinite(up) || up < 0 || typeof down !== "number" || !Number.isFinite(down) || down < 0) return []
     return [{ timestamp, up, down }]
   }).sort((a, b) => a.timestamp - b.timestamp).slice(-30)
 }
@@ -246,10 +246,13 @@ export async function fetchRecentNetworkData(
   for (const reading of readings) {
     if (!reading) continue
     const latest = reading.samples[reading.samples.length - 1]
-    result[reading.uuid] = {
-      ...result[reading.uuid],
-      net_out: latest.up,
-      net_in: latest.down,
+    const rpcTimestamp = Date.parse(result[reading.uuid]?.time ?? "")
+    if (!Number.isFinite(rpcTimestamp) || latest.timestamp > rpcTimestamp) {
+      result[reading.uuid] = {
+        ...result[reading.uuid],
+        net_out: latest.up,
+        net_in: latest.down,
+      }
     }
     history[reading.uuid] = reading.samples
   }

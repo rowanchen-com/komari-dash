@@ -114,7 +114,20 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
       const { overview, serverMap } = buildOverview(nodes, statuses, previousServersRef.current)
       previousServersRef.current = serverMap
       setData(overview)
-      setNetworkHistory((current) => mergeNetworkHistories(current, recentHistory, Date.now()))
+      const liveHistory: Record<string, NetworkSpeedSample[]> = {}
+      for (const [uuid, status] of Object.entries(statuses)) {
+        if (!status.online) continue
+        const timestamp = Date.parse(status.time)
+        const samples = recentHistory[uuid]
+        const latestRecent = samples?.[samples.length - 1]
+        if (!Number.isFinite(timestamp) || (latestRecent && latestRecent.timestamp > timestamp)) continue
+        liveHistory[uuid] = [{ timestamp, up: status.net_out, down: status.net_in }]
+      }
+      setNetworkHistory((current) => mergeNetworkHistories(
+        mergeNetworkHistories(current, recentHistory, Date.now()),
+        liveHistory,
+        Date.now(),
+      ))
       setHistory((current) => {
         const next = { timestamp: Date.now(), data: overview }
         return initial ? [next] : [next, ...current].slice(0, MAX_HISTORY_LENGTH)
