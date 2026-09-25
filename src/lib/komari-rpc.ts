@@ -262,6 +262,7 @@ export async function fetchPublicInfo(signal?: AbortSignal): Promise<KomariPubli
 
   return {
     sitename: asString(result.sitename),
+    description: asString(result.description),
     theme_settings: isRecord(result.theme_settings) ? result.theme_settings : null,
   }
 }

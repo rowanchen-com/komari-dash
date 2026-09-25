@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { buildNetworkMetricHistory, buildPingChartData, buildPingRecordPoints, fetchPingChartData, fetchRecentNetworkData, mergePingPoints, normalizeLatestStatuses, normalizeNodes, normalizeServer } from "@/lib/komari-rpc"
+import { buildNetworkMetricHistory, buildPingChartData, buildPingRecordPoints, fetchPingChartData, fetchPublicInfo, fetchRecentNetworkData, mergePingPoints, normalizeLatestStatuses, normalizeNodes, normalizeServer } from "@/lib/komari-rpc"
 import { parseRpcResponse } from "@/lib/rpc2"
 
 const nodeResponse = {
@@ -27,6 +27,22 @@ const nodeResponse = {
 }
 
 describe("Komari 1.5.0 RPC2 adapters", () => {
+  it("reads the built-in site description without theme-specific overrides", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      jsonrpc: "2.0",
+      result: { sitename: "Monitor", description: "System status", theme_settings: {} },
+    }))))
+    try {
+      expect(await fetchPublicInfo()).toEqual({
+        sitename: "Monitor",
+        description: "System status",
+        theme_settings: {},
+      })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it("joins official upload and download rate metrics for the fifteen-minute prefill", () => {
     const points = buildNetworkMetricHistory({ series: [
       { metric_key: "net.in.rate", entity_id: "node-1", points: [

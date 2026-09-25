@@ -15,10 +15,7 @@
       { "key": "showNetTransfer", "name": "显示流量统计", "type": "switch", "default": false, "help": "在服务器卡片上显示总上传/下载流量" },
       { "key": "disableCartoon", "name": "禁用卡通图标", "type": "switch", "default": false, "help": "隐藏网络卡片上的卡通图标" },
       { "key": "fixedTopServerName", "name": "固定顶部服务器名", "type": "switch", "default": false, "help": "将服务器名称固定在卡片顶部" },
-      { "key": "showTagCount", "name": "显示分组数量", "type": "switch", "default": false, "help": "在分组标签旁显示服务器数量" },
-      { "key": "customLogo", "name": "自定义Logo URL", "type": "string", "default": "", "help": "自定义Logo图片地址" },
-      { "key": "customDescription", "name": "自定义描述", "type": "string", "default": "", "help": "自定义站点描述文字" },
-      { "key": "customLinks", "name": "自定义链接", "type": "string", "default": "", "help": "JSON格式的自定义链接，如: [{\"link\":\"https://example.com\",\"name\":\"Example\"}]" }
+      { "key": "showTagCount", "name": "显示分组数量", "type": "switch", "default": false, "help": "在分组标签旁显示服务器数量" }
     ]
   }
 }

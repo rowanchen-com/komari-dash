@@ -48,6 +48,7 @@ export interface KomariLatestStatus {
 
 export interface KomariPublicInfo {
   sitename: string
+  description: string
   theme_settings: Record<string, unknown> | null
 }
 

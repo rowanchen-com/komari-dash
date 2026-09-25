@@ -54,9 +54,6 @@ Theme settings can be configured in the Komari dashboard:
 | Disable Cartoon | Hide cartoon icon on network card | `false` |
 | Fixed Top Server Name | Pin server name to top of card | `false` |
 | Show Tag Count | Show server count next to group tags | `false` |
-| Custom Logo URL | Custom logo image URL | - |
-| Custom Description | Custom site description | - |
-| Custom Links | JSON format custom links | - |
 
 ## Credits
 
