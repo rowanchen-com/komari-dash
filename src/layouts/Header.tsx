@@ -7,6 +7,7 @@ import { LoginButton } from "@/components/LoginButton"
 import { usePublicInfo } from "@/hooks/usePublicInfo"
 import { useLocale } from "@/context/locale-context"
 import { AnimateCountClient } from "@/components/AnimateCount"
+import { resolveSiteDescription } from "@/lib/site-description"
 
 function Clock() {
   const [time, setTime] = useState({ hh: new Date().getHours(), mm: new Date().getMinutes(), ss: new Date().getSeconds() })
@@ -35,7 +36,7 @@ export default function Header() {
   const { t } = useLocale()
   const { info } = usePublicInfo()
   const siteName = info?.sitename || "KomariDash"
-  const siteDesc = info?.description?.trim() || t("Header", "desc")
+  const siteDesc = resolveSiteDescription(info?.description, t("Header", "desc"))
 
   const handleLogoClick = useCallback(() => {
     sessionStorage.removeItem("selectedTag")
