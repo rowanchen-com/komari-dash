@@ -13,31 +13,37 @@
 - 详细的服务器页面，包含 CPU、内存、磁盘、网络、连接数、进程图表
 - 网络延迟监控，支持 Ping 图表和 Peak Cut（EWMA 平滑）
 - 深色 / 浅色主题切换
-- 多语言支持（English、简体中文、繁體中文、日本語）
+- 多语言支持（English、Bahasa Indonesia、简体中文、繁體中文、日本語）
 - 搜索命令面板
 - 响应式设计，适配移动端和桌面端
 - OS Logo 图标（font-logos）
 - 动画圆形进度条
 - 列表视图和卡片视图切换
 
+## 兼容性
+
+当前仅适配并验证 **Komari 1.6.0**，不再维护旧版本兼容。后续 Komari 版本会在验证后更新此处的支持说明。
+
+主题统一通过 `/api/rpc2` 读取数据，不再调用旧的 `/api/recent/*` 和 `/api/records/*` 路由。后台与终端继续由 Komari 内置界面接管。
+
 ## 安装
 
-1. 进入 Komari 面板 → 设置 → 主题
+1. 进入 Komari 后台 → 主题 → 主题管理
 2. 上传 [Releases](../../releases) 页面中的 `KomariDash.zip` 文件
 3. 完成
 
 ## 本地开发
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
 ## 构建
 
 ```bash
-npm run build
-node scripts/zip.mjs
+npm test
+npm run zip
 ```
 
 生成的 `KomariDash.zip` 即可上传使用。

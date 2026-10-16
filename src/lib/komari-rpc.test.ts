@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest"
-import { buildNetworkMetricHistory, buildPingChartData, buildPingRecordPoints, fetchPingChartData, fetchPublicInfo, fetchRecentNetworkData, mergePingPoints, normalizeLatestStatuses, normalizeNodes, normalizeServer } from "@/lib/komari-rpc"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { buildNetworkMetricHistory, buildPingChartData, buildRecentNetworkHistory, fetchNetworkMetricHistory, fetchPingChartData, fetchRecentPingChartPoints, fetchPublicInfo, fetchRecentNetworkData, mergePingPoints, normalizeLatestStatuses, normalizeNodes, normalizeServer } from "@/lib/komari-rpc"
 import { parseRpcResponse } from "@/lib/rpc2"
 
 const nodeResponse = {
@@ -22,11 +22,91 @@ const nodeResponse = {
     group: "Asia",
     tags: "edge",
     hidden: false,
-    version: "agent-1.5.0",
+    version: "agent-1.6.0",
   },
 }
 
-describe("Komari 1.5.0 RPC2 adapters", () => {
+afterEach(() => vi.unstubAllGlobals())
+
+describe("Komari 1.6.0 RPC2 adapters", () => {
+  it("overlays precise ten-minute network samples onto the fifteen-minute rollup", async () => {
+    const mock = vi.fn(async (_url: string, options: RequestInit) => {
+      const { params } = JSON.parse(String(options.body))
+      const points = params.hours === 10 / 60
+        ? [{ time: "2026-10-16T00:05:00Z", value: 195.125 }]
+        : [{ time: "2026-10-16T00:00:00Z", value: 100 }, { time: "2026-10-16T00:05:00Z", value: 999 }]
+      return new Response(JSON.stringify({ jsonrpc: "2.0", result: { series: [
+        { metric_key: "net.out.rate", entity_id: "node-1", points },
+      ] } }))
+    })
+    vi.stubGlobal("fetch", mock)
+    expect((await fetchNetworkMetricHistory("node-1")).map((sample) => sample.up)).toEqual([100, 195.125])
+    expect(mock).toHaveBeenCalledTimes(2)
+  })
+
+  it("uses server ping statistics for extrema instead of deriving them from averaged chart buckets", () => {
+    const data = buildPingChartData("node-1", [{ id: 1, name: "Test", interval: 60 }], { series: [{
+      metric_key: "ping.latency_ms", entity_id: "node-1", tags: { task_id: "1" },
+      points: [{ time: "2026-10-16T00:00:00Z", value: 20 }],
+    }] }, { stats: [{ entity_id: "node-1", task_id: "1", loss: 1.5, min: 0, max: 327.125, latest: 18.75 }] })
+    expect(data.tasks[0]).toMatchObject({ min: 0, max: 327.125, latest: 18.75, loss: 1.5 })
+  })
+  it("filters malformed and foreign recent samples, deduplicates by server time and preserves bytes", () => {
+    const record = { client: "node-1", time: "2026-10-16T00:00:00Z", net_out: 0.125, net_in: 195 }
+    expect(buildRecentNetworkHistory({ records: [
+      record, { ...record, client: "node-2" }, { ...record, time: "invalid" },
+      { ...record, net_out: -1 }, { ...record, net_in: null },
+      { ...record, net_in: 196 },
+    ] }, "node-1")).toEqual([{ timestamp: Date.parse(record.time), up: 0.125, down: 196 }])
+    expect(() => buildRecentNetworkHistory({ status: "success", data: [] }, "node-1")).toThrow("common:getNodeRecentStatus")
+  })
+
+  it("propagates cancellation of recent status requests instead of treating it as empty data", async () => {
+    const controller = new AbortController()
+    controller.abort()
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new DOMException("Aborted", "AbortError")))
+    await expect(fetchRecentNetworkData(normalizeNodes(nodeResponse), normalizeLatestStatuses({
+      "node-1": { client: "node-1", online: true },
+    }), controller.signal)).rejects.toThrow("Aborted")
+  })
+
+  it("fetches raw recent ping samples without REST or rounding", async () => {
+    const mock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ jsonrpc: "2.0", result: { series: [{
+      metric_key: "ping.latency_ms", entity_id: "node-1", tags: { task_id: "1" },
+      points: [{ time: "2026-10-16T00:00:00Z", value: 0.00125 }],
+    }] } })))
+    vi.stubGlobal("fetch", mock)
+    expect((await fetchRecentPingChartPoints("node-1", 1))[0].value).toBe(0.00125)
+    expect(mock).toHaveBeenCalledTimes(1)
+    const [url, options] = mock.mock.calls[0]
+    expect(url).toBe("/api/rpc2")
+    expect(JSON.parse(options.body).params).toMatchObject({ hours: 10 / 60, fill_empty: false, aggregation: "avg" })
+  })
+
+  it("does not hide a failed metric query behind an empty chart", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => new Response(JSON.stringify({
+      jsonrpc: "2.0", error: { code: -32603, message: "Metric query failed" },
+    }))))
+    await expect(fetchPingChartData("node-1")).rejects.toThrow("Metric query failed")
+  })
+
+  it("does not duplicate the raw-window request for short ping histories", async () => {
+    const mock = vi.fn(async (_url: string, options: RequestInit) => {
+      const { method } = JSON.parse(String(options.body))
+      const result = method === "public:getPublicPingTasks" ? [] : method === "public:getPingMetricStats" ? { stats: [] } : { series: [] }
+      return new Response(JSON.stringify({ jsonrpc: "2.0", result }))
+    })
+    vi.stubGlobal("fetch", mock)
+    expect(await fetchPingChartData("node-1", 0.1)).toEqual({ tasks: [], points: [] })
+    expect(mock).toHaveBeenCalledTimes(3)
+  })
+
+  it("bounds ping refresh history to its requested time window", () => {
+    const point = (time: string) => ({ taskId: "1", time, value: 10, loss: 0 })
+    const old = point("2026-10-14T00:00:00Z")
+    const current = point("2026-10-16T00:00:00Z")
+    expect(mergePingPoints([old], [current], false, Date.parse("2026-10-15T00:00:00Z"))).toEqual([current])
+  })
   it("reads the built-in site description without theme-specific overrides", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       jsonrpc: "2.0",
@@ -68,16 +148,19 @@ describe("Komari 1.5.0 RPC2 adapters", () => {
       "node-1": { client: "node-1", online: true, net_in: 11, net_out: 12 },
     })
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      status: "success",
-      data: [
-        { updated_at: "2026-09-24T20:00:00Z", network: { up: 31457.28, down: 10485.76 } },
-        { updated_at: "2026-09-24T20:00:04Z", network: { up: 100, down: 200 } },
-      ],
+      jsonrpc: "2.0", result: { count: 2, records: [
+        { client: "node-1", time: "2026-09-24T20:00:00Z", net_out: 31457.28, net_in: 10485.76 },
+        { client: "node-1", time: "2026-09-24T20:00:04Z", net_out: 100, net_in: 200 },
+      ] },
     })))
     vi.stubGlobal("fetch", fetchMock)
     try {
       const result = await fetchRecentNetworkData(nodes, statuses)
-      expect(fetchMock).toHaveBeenCalledWith("/api/recent/node-1", { signal: undefined })
+      expect(fetchMock).toHaveBeenCalledWith("/api/rpc2", expect.objectContaining({
+        body: expect.stringContaining('"method":"common:getNodeRecentStatus"'),
+        credentials: "same-origin",
+      }))
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).params).toEqual({ uuid: "node-1" })
       expect(result.statuses["node-1"].net_out).toBe(100)
       expect(result.statuses["node-1"].net_in).toBe(200)
       expect(result.history["node-1"].map((sample) => sample.timestamp)).toEqual([
@@ -93,8 +176,7 @@ describe("Komari 1.5.0 RPC2 adapters", () => {
   it("does not let an older or same-time recent sample replace the RPC rate", async () => {
     const nodes = normalizeNodes(nodeResponse)
     const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
-      status: "success",
-      data: [{ updated_at: "2026-09-24T20:00:04Z", network: { up: 100, down: 200 } }],
+      jsonrpc: "2.0", result: { count: 1, records: [{ client: "node-1", time: "2026-09-24T20:00:04Z", net_out: 100, net_in: 200 }] },
     })))
     vi.stubGlobal("fetch", fetchMock)
     try {
@@ -169,7 +251,7 @@ describe("Komari 1.5.0 RPC2 adapters", () => {
     expect(server.online).toBe(true)
     expect(server.host.memTotal).toBe(2048)
     expect(server.host.gpu).toBe("Example GPU")
-    expect(server.version).toBe("agent-1.5.0")
+    expect(server.version).toBe("agent-1.6.0")
     expect(server.status.tcpConn).toBe(15)
     expect(server.status.udpConn).toBe(3)
     expect(server.status).not.toHaveProperty("gpu")
@@ -263,15 +345,20 @@ describe("Komari 1.5.0 RPC2 adapters", () => {
     ])
   })
 
-  it("keeps raw ping peaks and packet loss without accepting another node's records", () => {
-    const points = buildPingRecordPoints({ status: "success", data: { records: [
-      { client: "node-1", task_id: 2, time: "2026-08-20T10:02:00Z", value: 327 },
-      { client: "node-2", task_id: 2, time: "2026-08-20T10:01:00Z", value: 999 },
-      { client: "node-1", task_id: 2, time: "2026-08-20T10:01:00Z", value: -1 },
-      { client: "node-1", task_id: 2, time: "invalid", value: 18 },
-    ] } }, "node-1")
-
-    expect(points.map(({ value, loss }) => [value, loss])).toEqual([[null, 100], [327, 0]])
+  it("keeps loss-only ping samples and matches equivalent timestamps across metric series", () => {
+    const { points } = buildPingChartData("node-1", [], { series: [
+      { metric_key: "ping.latency_ms", entity_id: "node-1", tags: { task_id: "2" }, points: [
+        { time: "2026-08-20T10:02:00Z", value: 327.125 },
+      ] },
+      { metric_key: "ping.loss", entity_id: "node-1", tags: { task_id: "2" }, points: [
+        { time: "2026-08-20T10:01:00Z", value: 1 },
+        { time: "2026-08-20T10:02:00.000Z", value: 0 },
+      ] },
+      { metric_key: "ping.latency_ms", entity_id: "node-2", tags: { task_id: "2" }, points: [
+        { time: "2026-08-20T10:01:00Z", value: 999 },
+      ] },
+    ] }, null)
+    expect(points.map(({ value, loss }) => [value, loss])).toEqual([[null, 100], [327.125, 0]])
   })
 
   it("replaces coarse ping buckets per task and deduplicates live refreshes", () => {
@@ -287,22 +374,18 @@ describe("Komari 1.5.0 RPC2 adapters", () => {
       .toEqual([10, 12, 150, 17])
   })
 
-  it("retains task labels when records exist but metric history is unavailable", () => {
+  it("retains task labels for loss-only monitors", () => {
     const data = buildPingChartData("node-1", [
       { id: 3, weight: 2, name: "Edge", clients: ["node-1"], interval: 60 },
-    ], { series: [] }, { stats: [] }, ["3"])
+    ], { series: [{ metric_key: "ping.loss", entity_id: "node-1", tags: { task_id: "3" }, points: [
+      { time: "2026-08-20T10:00:00Z", value: 1 },
+    ] }] }, { stats: [] })
     expect(data.tasks).toEqual([{ id: "3", weight: 2, name: "Edge", interval: 60, loss: 0 }])
   })
 
-  it("falls back to metric history when an older core exposes only short REST records", async () => {
+  it("combines 24-hour rollups with precise ten-minute metrics using RPC only", async () => {
     const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
-      if (url.startsWith("/api/records/ping")) {
-        const hours = new URL(url, "https://example.test").searchParams.get("hours")
-        const records = hours === "24"
-          ? [{ client: "node-1", task_id: 1, time: "2026-08-20T11:00:00Z", value: 17 }]
-          : [{ client: "node-1", task_id: 1, time: "2026-08-20T11:01:00Z", value: 87 }]
-        return new Response(JSON.stringify({ status: "success", data: { records } }))
-      }
+      expect(url).toBe("/api/rpc2")
       const body = JSON.parse(String(options?.body)) as { method: string; params?: Record<string, unknown> }
       if (body.method === "public:getPublicPingTasks") {
         return new Response(JSON.stringify({ jsonrpc: "2.0", result: [
@@ -314,9 +397,9 @@ describe("Komari 1.5.0 RPC2 adapters", () => {
       }
       expect(body.params?.max_points).toBe(2000)
       return new Response(JSON.stringify({ jsonrpc: "2.0", result: { series: [{
-        metric_key: "ping.latency_ms", entity_id: "node-1", tags: { task_id: "1" }, points: [
-          { time: "2026-08-20T10:00:00Z", value: 12 },
-          { time: "2026-08-20T11:00:00Z", value: 16 },
+        metric_key: "ping.latency_ms", entity_id: "node-1", tags: { task_id: "1" },
+        points: body.params?.hours === 10 / 60 ? [{ time: "2026-08-20T11:01:00Z", value: 87.125 }] : [
+          { time: "2026-08-20T10:00:00Z", value: 12 }, { time: "2026-08-20T11:00:00Z", value: 16 },
         ],
       }] } }))
     })
@@ -324,7 +407,8 @@ describe("Komari 1.5.0 RPC2 adapters", () => {
     try {
       const data = await fetchPingChartData("node-1", 24)
       expect(data.tasks[0].name).toBe("Test")
-      expect(data.points.map((point) => point.value)).toEqual([12, 16, 87])
+      expect(data.points.map((point) => point.value)).toEqual([12, 16, 87.125])
+      expect(fetchMock).toHaveBeenCalledTimes(4)
     } finally {
       vi.unstubAllGlobals()
     }
@@ -333,8 +417,8 @@ describe("Komari 1.5.0 RPC2 adapters", () => {
 
 describe("RPC2 envelope validation", () => {
   it("returns a successful result", () => {
-    expect(parseRpcResponse({ jsonrpc: "2.0", id: 1, result: { version: "1.5.0" } }))
-      .toEqual({ version: "1.5.0" })
+    expect(parseRpcResponse({ jsonrpc: "2.0", id: 1, result: { version: "1.6.0" } }))
+      .toEqual({ version: "1.6.0" })
   })
 
   it("surfaces JSON-RPC errors", () => {

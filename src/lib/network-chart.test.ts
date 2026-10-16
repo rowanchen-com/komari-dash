@@ -3,45 +3,28 @@ import { buildNetworkChartData, combineNetworkHistory, getNetworkAxisMax, mergeN
 
 describe("buildNetworkChartData", () => {
   const MiB = 1024 ** 2
-  const history = [
-    { timestamp: 3000, data: { servers: [
-      { uuid: "a", status: { netOutSpeed: 300, netInSpeed: 30 } },
-      { uuid: "b", status: { netOutSpeed: 900, netInSpeed: 90 } },
-    ] } },
-    { timestamp: 2000, data: { servers: [
-      { uuid: "a", status: { netOutSpeed: 200, netInSpeed: 20 } },
-    ] } },
-  ]
-
   it("keeps chronological, unrounded M/s rates and upload/download direction", () => {
-    expect(buildNetworkChartData(history, history[0].data.servers[0])).toEqual([
+    expect(buildNetworkChartData([
+      { timestamp: 2000, up: 200, down: 20 }, { timestamp: 3000, up: 300, down: 30 },
+    ])).toEqual([
       { ts: "2000", upload: 200 / MiB, download: 20 / MiB },
       { ts: "3000", upload: 300 / MiB, download: 30 / MiB },
     ])
   })
 
-  it("does not carry samples across servers", () => {
-    expect(buildNetworkChartData(history, history[0].data.servers[1])).toEqual([
-      { ts: "3000", upload: 900 / MiB, download: 90 / MiB },
-    ])
-  })
-
-  it("does not invent a timestamp when a reading changes", () => {
-    const current = { uuid: "a", status: { netOutSpeed: 400, netInSpeed: 40 } }
-    expect(buildNetworkChartData(history, current)).toHaveLength(2)
+  it("does not invent samples when the backend has no history", () => {
+    expect(buildNetworkChartData([])).toEqual([])
   })
 
   it("plots sub-0.01 M/s traffic even when the header rounds to 0.00 M/s", () => {
-    const current = { uuid: "a", status: { netOutSpeed: 1024, netInSpeed: 2048 } }
-    const [point] = buildNetworkChartData([], current, [{ timestamp: 4000, up: 1024, down: 2048 }])
+    const [point] = buildNetworkChartData([{ timestamp: 4000, up: 1024, down: 2048 }])
     expect(point.upload.toFixed(2)).toBe("0.00")
     expect(point.upload).toBeGreaterThan(0)
     expect(point.download).toBeGreaterThan(point.upload)
   })
 
   it("plots the recent one-minute samples instead of duplicating a delayed reading", () => {
-    const current = { uuid: "a", status: { netOutSpeed: 10, netInSpeed: 20 } }
-    expect(buildNetworkChartData([], current, [
+    expect(buildNetworkChartData([
         { timestamp: 40000, up: 0, down: 0 },
         { timestamp: 70000, up: MiB, down: 2 * MiB },
         { timestamp: 100000, up: 0, down: 0 },
@@ -62,6 +45,14 @@ describe("buildNetworkChartData", () => {
       { a: [latest, prior] },
       now,
     )).toEqual({ a: [prior, latest] })
+  })
+
+  it("keeps each node's history isolated while replacing a sample at the same server time", () => {
+    const now = 1_000_000
+    const first = { timestamp: now - 1000, up: 1, down: 2 }
+    const second = { ...first, up: 10, down: 20 }
+    expect(mergeNetworkHistories({ a: [first], b: [second] }, { a: [second] }, now))
+      .toEqual({ a: [second], b: [second] })
   })
 
   it("uses coarse metrics only before the fine-grained live samples", () => {

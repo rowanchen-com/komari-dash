@@ -16,6 +16,7 @@ import type {
 
 const PING_LATENCY_METRIC = "ping.latency_ms"
 const PING_LOSS_METRIC = "ping.loss"
+const RAW_METRIC_WINDOW_HOURS = 10 / 60
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -202,26 +203,32 @@ export function buildNetworkMetricHistory(value: unknown, uuid: string): Network
 }
 
 export async function fetchNetworkMetricHistory(uuid: string, signal?: AbortSignal): Promise<NetworkSpeedSample[]> {
-  const result = await rpcCall<Record<string, unknown>, QueryMetricsResponse>("public:queryMetrics", {
-    metric_keys: [NETWORK_IN_METRIC, NETWORK_OUT_METRIC],
-    entity_id: uuid,
-    hours: 0.25,
-    max_points: 1000,
-    aggregation: "max",
-    fill_empty: false,
-  }, { signal, timeout: 30000 })
-  return buildNetworkMetricHistory(result, uuid)
+  const [history, recent] = await Promise.all([0.25, RAW_METRIC_WINDOW_HOURS].map((hours) =>
+    rpcCall<Record<string, unknown>, QueryMetricsResponse>("public:queryMetrics", {
+      metric_keys: [NETWORK_IN_METRIC, NETWORK_OUT_METRIC],
+      entity_id: uuid,
+      hours,
+      max_points: 1000,
+      aggregation: "max",
+      fill_empty: false,
+    }, { signal, timeout: 30000 })))
+  const raw = buildNetworkMetricHistory(recent, uuid)
+  const firstRawTime = raw[0]?.timestamp ?? Infinity
+  return [...buildNetworkMetricHistory(history, uuid).filter((sample) => sample.timestamp < firstRawTime), ...raw]
 }
 
-function recentNetwork(value: unknown): NetworkSpeedSample[] {
-  if (!isRecord(value) || value.status !== "success" || !Array.isArray(value.data)) return []
-  return value.data.flatMap((entry): NetworkSpeedSample[] => {
-    if (!isRecord(entry) || !isRecord(entry.network)) return []
-    const { up, down } = entry.network
-    const timestamp = Date.parse(asString(entry.updated_at))
+export function buildRecentNetworkHistory(value: unknown, uuid: string): NetworkSpeedSample[] {
+  if (!isRecord(value) || !Array.isArray(value.records)) throw new Error("Invalid common:getNodeRecentStatus result")
+  const samples = value.records.flatMap((entry): NetworkSpeedSample[] => {
+    if (!isRecord(entry) || entry.client !== uuid) return []
+    const up = entry.net_out
+    const down = entry.net_in
+    const timestamp = Date.parse(asString(entry.time))
     if (!Number.isFinite(timestamp) || typeof up !== "number" || !Number.isFinite(up) || up < 0 || typeof down !== "number" || !Number.isFinite(down) || down < 0) return []
     return [{ timestamp, up, down }]
-  }).sort((a, b) => a.timestamp - b.timestamp).slice(-30)
+  })
+  return [...new Map(samples.map((sample) => [sample.timestamp, sample])).values()]
+    .sort((a, b) => a.timestamp - b.timestamp).slice(-30)
 }
 
 export async function fetchRecentNetworkData(
@@ -232,11 +239,11 @@ export async function fetchRecentNetworkData(
   const readings = await Promise.all(nodes.map(async (node) => {
     if (!statuses[node.uuid]?.online) return null
     try {
-      const response = await fetch(`/api/recent/${encodeURIComponent(node.uuid)}`, { signal })
-      if (!response.ok) return null
-      const samples = recentNetwork(await response.json())
+      const result = await rpcCall<{ uuid: string }, unknown>("common:getNodeRecentStatus", { uuid: node.uuid }, { signal })
+      const samples = buildRecentNetworkHistory(result, node.uuid)
       return samples.length > 0 ? { uuid: node.uuid, samples } : null
-    } catch {
+    } catch (error) {
+      if (signal?.aborted) throw error
       return null
     }
   }))
@@ -271,7 +278,8 @@ export async function fetchPublicInfo(signal?: AbortSignal): Promise<KomariPubli
 }
 
 function pointTaskId(series: MetricSeries, point: MetricSeries["points"][number]): string {
-  return point.tags?.task_id?.trim() || series.tags?.task_id?.trim() || ""
+  return (isRecord(point.tags) ? asString(point.tags.task_id).trim() : "") ||
+    (isRecord(series.tags) ? asString(series.tags.task_id).trim() : "")
 }
 
 export function buildPingChartData(
@@ -279,7 +287,6 @@ export function buildPingChartData(
   tasksValue: unknown,
   metricsValue: unknown,
   statsValue: unknown,
-  additionalTaskIds: Iterable<string> = [],
 ): PingChartData {
   const tasks = Array.isArray(tasksValue) ? tasksValue : []
   const metrics = isRecord(metricsValue) && Array.isArray(metricsValue.series)
@@ -316,29 +323,18 @@ export function buildPingChartData(
       name: asString(value.name) || undefined,
       interval: asNumber(value.interval),
       loss: asNumber(value.loss),
+      min: typeof value.min === "number" && Number.isFinite(value.min) ? value.min : undefined,
+      max: typeof value.max === "number" && Number.isFinite(value.max) ? value.max : undefined,
+      latest: typeof value.latest === "number" && Number.isFinite(value.latest) ? value.latest : undefined,
     })
   }
 
-  const points: PingChartData["points"] = []
-  const taskIds = new Set(additionalTaskIds)
-  const losses = new Map<string, number | null>()
-  for (const value of metrics) {
-    if (!isRecord(value) || value.metric_key !== PING_LOSS_METRIC || value.entity_id !== uuid || !Array.isArray(value.points)) continue
-    const series = value as unknown as MetricSeries
-    for (const point of series.points) {
-      if (!isRecord(point)) continue
-      const taskId = pointTaskId(series, point)
-      const time = asString(point.time)
-      if (!taskId || !Number.isFinite(Date.parse(time))) continue
-      losses.set(`${taskId}:${time}`, typeof point.value === "number" && Number.isFinite(point.value)
-        ? Math.max(0, Math.min(100, point.value * 100))
-        : null)
-    }
-  }
+  const pointsByTaskTime = new Map<string, PingChartPoint>()
+  const taskIds = new Set<string>()
   for (const value of metrics) {
     if (
       !isRecord(value) ||
-      value.metric_key !== PING_LATENCY_METRIC ||
+      (value.metric_key !== PING_LATENCY_METRIC && value.metric_key !== PING_LOSS_METRIC) ||
       value.entity_id !== uuid ||
       !Array.isArray(value.points)
     ) continue
@@ -347,16 +343,15 @@ export function buildPingChartData(
       if (!isRecord(point)) continue
       const taskId = pointTaskId(series, point)
       const time = asString(point.time)
-      if (!taskId || !Number.isFinite(Date.parse(time))) continue
+      const timestamp = Date.parse(time)
+      if (!taskId || !Number.isFinite(timestamp)) continue
       taskIds.add(taskId)
-      points.push({
-        taskId,
-        time,
-        value: typeof point.value === "number" && Number.isFinite(point.value) && point.value >= 0
-          ? point.value
-          : null,
-        loss: losses.get(`${taskId}:${time}`) ?? null,
-      })
+      const key = `${taskId}:${timestamp}`
+      const sample = pointsByTaskTime.get(key) ?? { taskId, time, value: null, loss: null }
+      const reading = typeof point.value === "number" && Number.isFinite(point.value) ? point.value : null
+      if (value.metric_key === PING_LOSS_METRIC) sample.loss = reading === null ? null : Math.max(0, Math.min(100, reading * 100))
+      else sample.value = reading !== null && reading >= 0 ? reading : null
+      pointsByTaskTime.set(key, sample)
     }
   }
 
@@ -369,31 +364,20 @@ export function buildPingChartData(
       name: task?.name || stat?.name || `Ping ${id}`,
       interval: task?.interval || stat?.interval || 0,
       loss: stat?.loss ?? 0,
+      min: stat?.min,
+      max: stat?.max,
+      latest: stat?.latest,
     }
   }).sort((left, right) => left.weight - right.weight || Number(left.id) - Number(right.id))
 
-  points.sort((left, right) => new Date(left.time).getTime() - new Date(right.time).getTime())
+  const points = [...pointsByTaskTime.values()].sort((left, right) => Date.parse(left.time) - Date.parse(right.time))
   const firstValid = points.findIndex((point) => point.value !== null || point.loss !== null)
   let lastValid = points.length - 1
   while (lastValid >= 0 && points[lastValid].value === null && points[lastValid].loss === null) lastValid--
   return { points: firstValid < 0 ? [] : points.slice(firstValid, lastValid + 1), tasks: chartTasks }
 }
 
-export function buildPingRecordPoints(value: unknown, uuid: string): PingChartPoint[] {
-  if (!isRecord(value) || value.status !== "success" || !isRecord(value.data) || !Array.isArray(value.data.records)) return []
-  const points: PingChartPoint[] = []
-  for (const record of value.data.records) {
-    if (!isRecord(record) || record.client !== uuid) continue
-    const taskId = String(record.task_id ?? "")
-    const time = asString(record.time)
-    const latency = record.value
-    if (!/^\d+$/.test(taskId) || !Number.isFinite(Date.parse(time)) || typeof latency !== "number" || !Number.isFinite(latency)) continue
-    points.push({ taskId, time, value: latency >= 0 ? latency : null, loss: latency < 0 ? 100 : 0 })
-  }
-  return points.sort((a, b) => Date.parse(a.time) - Date.parse(b.time))
-}
-
-export function mergePingPoints(base: readonly PingChartPoint[], overlay: readonly PingChartPoint[], replaceTail = false): PingChartPoint[] {
+export function mergePingPoints(base: readonly PingChartPoint[], overlay: readonly PingChartPoint[], replaceTail = false, cutoff = -Infinity): PingChartPoint[] {
   const firstOverlay = new Map<string, number>()
   for (const point of overlay) {
     const time = Date.parse(point.time)
@@ -403,50 +387,54 @@ export function mergePingPoints(base: readonly PingChartPoint[], overlay: readon
   const merged = new Map<string, PingChartPoint>()
   for (const point of base) {
     const time = Date.parse(point.time)
-    if (!Number.isFinite(time) || (replaceTail && time >= (firstOverlay.get(point.taskId) ?? Infinity))) continue
+    if (!Number.isFinite(time) || time < cutoff || (replaceTail && time >= (firstOverlay.get(point.taskId) ?? Infinity))) continue
     merged.set(`${point.taskId}:${time}`, point)
   }
   for (const point of overlay) {
     const time = Date.parse(point.time)
-    if (Number.isFinite(time)) merged.set(`${point.taskId}:${time}`, point)
+    if (Number.isFinite(time) && time >= cutoff) merged.set(`${point.taskId}:${time}`, point)
   }
   return [...merged.values()].sort((a, b) => Date.parse(a.time) - Date.parse(b.time) || Number(a.taskId) - Number(b.taskId))
 }
 
+async function fetchPingMetrics(uuid: string, hours: number, signal?: AbortSignal): Promise<QueryMetricsResponse> {
+  const result = await rpcCall<Record<string, unknown>, QueryMetricsResponse>("public:queryMetrics", {
+    metric_keys: [PING_LATENCY_METRIC, PING_LOSS_METRIC],
+    entity_id: uuid,
+    hours,
+    max_points: 2000,
+    aggregation: "avg",
+    fill_empty: false,
+  }, { signal, timeout: 30000 })
+  if (!isRecord(result) || !Array.isArray(result.series)) throw new Error("Invalid public:queryMetrics result")
+  return result
+}
+
 export async function fetchRecentPingChartPoints(uuid: string, hours: number, signal?: AbortSignal): Promise<PingChartPoint[]> {
-  try {
-    const response = await fetch(`/api/records/ping?uuid=${encodeURIComponent(uuid)}&hours=${hours}`, { signal })
-    if (!response.ok) return []
-    return buildPingRecordPoints(await response.json(), uuid)
-  } catch (error) {
-    if (signal?.aborted) throw error
-    return []
-  }
+  const metrics = await fetchPingMetrics(uuid, Math.min(hours, RAW_METRIC_WINDOW_HOURS), signal)
+  return buildPingChartData(uuid, [], metrics, null).points
+}
+
+export function fetchPingMetricStats(uuid: string, hours: number, signal?: AbortSignal): Promise<PingMetricStatsResponse> {
+  return rpcCall<Record<string, unknown>, PingMetricStatsResponse>("public:getPingMetricStats", {
+    entity_id: uuid, hours, max_points: 2000,
+  }, { signal, timeout: 30000 })
 }
 
 export async function fetchPingChartData(uuid: string, hours = 24, signal?: AbortSignal): Promise<PingChartData> {
-  const [tasks, metrics, stats, records, recent] = await Promise.all([
-    rpcCall<undefined, PublicPingTask[]>("public:getPublicPingTasks", undefined, { signal }).catch(() => []),
-    rpcCall<Record<string, unknown>, QueryMetricsResponse>("public:queryMetrics", {
-      metric_keys: [PING_LATENCY_METRIC, PING_LOSS_METRIC],
-      entity_id: uuid,
-      hours,
-      max_points: 2000,
-      aggregation: "avg",
-      fill_empty: false,
-    }, { signal, timeout: 30000 }).catch(() => ({ series: [] })),
-    rpcCall<Record<string, unknown>, PingMetricStatsResponse>("public:getPingMetricStats", {
-      entity_id: uuid,
-      hours,
-      max_points: 2000,
-    }, { signal, timeout: 30000 }).catch(() => ({ stats: [] })),
-    fetchRecentPingChartPoints(uuid, hours, signal),
-    fetchRecentPingChartPoints(uuid, Math.min(hours, 8), signal),
+  const [tasks, metrics, stats, recent] = await Promise.all([
+    rpcCall<undefined, PublicPingTask[]>("public:getPublicPingTasks", undefined, { signal }),
+    fetchPingMetrics(uuid, hours, signal),
+    fetchPingMetricStats(uuid, hours, signal),
+    // Longer queries use rollups; overlay the exact ten-minute memory window.
+    hours > RAW_METRIC_WINDOW_HOURS ? fetchPingMetrics(uuid, RAW_METRIC_WINDOW_HOURS, signal) : Promise.resolve({ series: [] }),
   ])
 
-  const recordTaskIds = new Set([...records, ...recent].map((point) => point.taskId))
-  const fallback = buildPingChartData(uuid, tasks, metrics, stats, recordTaskIds)
-  const recordSpan = records.length > 1 ? Date.parse(records[records.length - 1].time) - Date.parse(records[0].time) : 0
-  const history = recordSpan >= Math.min(hours, 12) * 3_600_000 ? records : fallback.points
-  return { tasks: fallback.tasks, points: mergePingPoints(history, recent, true) }
+  const data = buildPingChartData(uuid, tasks, metrics, stats)
+  const raw = buildPingChartData(uuid, tasks, recent, stats)
+  const taskMap = new Map([...data.tasks, ...raw.tasks].map((task) => [task.id, task]))
+  return {
+    tasks: [...taskMap.values()].sort((a, b) => a.weight - b.weight || Number(a.id) - Number(b.id)),
+    points: mergePingPoints(data.points, raw.points, true),
+  }
 }

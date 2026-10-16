@@ -37,16 +37,6 @@ export function combineNetworkHistory(
   ).server ?? []
 }
 
-interface NetworkSnapshot {
-  timestamp: number
-  data: {
-    servers: readonly {
-      uuid: string
-      status: { netOutSpeed: number; netInSpeed: number }
-    }[]
-  }
-}
-
 export interface NetworkChartPoint {
   ts: string
   upload: number
@@ -58,23 +48,10 @@ export function getNetworkAxisMax(points: readonly NetworkChartPoint[]): number 
   return Math.max(1, Math.ceil(peak))
 }
 
-type CurrentNetworkServer = NetworkSnapshot["data"]["servers"][number]
-
-export function buildNetworkChartData(history: readonly NetworkSnapshot[], current: CurrentNetworkServer, recent: readonly NetworkSpeedSample[] = []): NetworkChartPoint[] {
-  if (recent.length > 0) {
-    return recent.map((sample) => ({
-      ts: sample.timestamp.toString(),
-      upload: sample.up / 1024 / 1024,
-      download: sample.down / 1024 / 1024,
-    }))
-  }
-
-  return history.flatMap((snapshot) => {
-    const server = snapshot.data.servers.find((item) => item.uuid === current.uuid)
-    return server ? [{
-      ts: snapshot.timestamp.toString(),
-      upload: server.status.netOutSpeed / 1024 / 1024,
-      download: server.status.netInSpeed / 1024 / 1024,
-    }] : []
-  }).reverse().slice(-30)
+export function buildNetworkChartData(samples: readonly NetworkSpeedSample[]): NetworkChartPoint[] {
+  return samples.map((sample) => ({
+    ts: sample.timestamp.toString(),
+    upload: sample.up / 1024 / 1024,
+    download: sample.down / 1024 / 1024,
+  }))
 }

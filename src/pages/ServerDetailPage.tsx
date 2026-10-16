@@ -16,9 +16,10 @@ import { Progress } from "@/components/ui/progress"
 import { cn, formatBytes, formatUptime, formatRelativeTime, formatDateTime, getMemPercent, getDiskPercent, getSwapPercent, isEmojiFlag, getCountryCode } from "@/lib/utils"
 import { buildNetworkChartData, combineNetworkHistory, getNetworkAxisMax } from "@/lib/network-chart"
 import { getPingChartTicks, smoothPingChartData } from "@/lib/ping-chart"
+import { getServerHistory } from "@/lib/server-history"
 import { useLocale } from "@/context/locale-context"
 import type { PingChartData as KomariPingChartData, PingChartTask, ServerInfo } from "@/types/komari"
-import { fetchNetworkMetricHistory, fetchPingChartData, fetchRecentPingChartPoints, mergePingPoints, type NetworkSpeedSample } from "@/lib/komari-rpc"
+import { fetchNetworkMetricHistory, fetchPingChartData, fetchPingMetricStats, fetchRecentPingChartPoints, mergePingPoints, type NetworkSpeedSample } from "@/lib/komari-rpc"
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ComposedChart, XAxis, YAxis } from "recharts"
 
 countries.registerLocale(enLocale)
@@ -168,7 +169,7 @@ export default function ServerDetailPage() {
         <CpuChart uuid={id!} history={history} server={server} />
         <MemChart uuid={id!} history={history} server={server} />
         <DiskChart uuid={id!} history={history} server={server} />
-        <NetworkRealtimeChart server={server} history={history} recent={networkHistory[server.uuid] ?? []} />
+          <NetworkRealtimeChart server={server} recent={networkHistory[server.uuid] ?? []} />
         <ConnRealtimeChart uuid={id!} history={history} />
         <ProcessChart uuid={id!} history={history} server={server} />
       </section>
@@ -200,42 +201,8 @@ function InfoCard({ label, children }: { label: string; children: React.ReactNod
 
 /* ── CPU Chart ── */
 function CpuChart({ uuid, history, server }: { uuid: string; history: ServerDataWithTimestamp[]; server: ServerInfo }) {
-  const [chartData, setChartData] = useState<{ ts: string; v: number }[]>([])
-  const initialized = useRef(false)
-
-  useEffect(() => {
-    if (!initialized.current && history.length > 0) {
-      const data = history.map((h) => {
-        const s = h.data.servers.find((s) => s.uuid === uuid)
-        if (!s) return null
-        return { ts: h.timestamp.toString(), v: s.status.cpu }
-      }).filter(Boolean).reverse() as { ts: string; v: number }[]
-      setChartData(data)
-      initialized.current = true
-    }
-  }, [history.length])
-
-  useEffect(() => {
-    if (!initialized.current || history.length === 0) return
-    const latest = history[0]
-    const s = latest.data.servers.find((s) => s.uuid === uuid)
-    if (!s) return
-    const timestamp = latest.timestamp.toString()
-    setChartData((prev) => {
-      if (prev[prev.length - 1]?.ts === timestamp) return prev
-      let newData: { ts: string; v: number }[]
-      if (prev.length === 0) {
-        newData = [
-          { ts: timestamp, v: s.status.cpu },
-          { ts: timestamp, v: s.status.cpu },
-        ]
-      } else {
-        newData = [...prev, { ts: timestamp, v: s.status.cpu }]
-      }
-      if (newData.length > 30) newData.shift()
-      return newData
-    })
-  }, [history[0]?.timestamp])
+  const chartData = useMemo(() => getServerHistory(history, uuid)
+    .map(({ ts, server }) => ({ ts, v: server.status.cpu })), [history, uuid])
 
   const current = server.status.cpu
 
@@ -261,7 +228,7 @@ function CpuChart({ uuid, history, server }: { uuid: string; history: ServerData
           <ChartContainer config={chartConfig} className="aspect-auto h-[130px] w-full">
             <AreaChart accessibilityLayer data={chartData} margin={{ top: 12, left: 12, right: 12 }}>
               <CartesianGrid vertical={false} />
-              <XAxis dataKey="ts" tickLine={false} axisLine={false} tickMargin={8} minTickGap={200} interval="preserveStartEnd" tickFormatter={(v) => formatRelativeTime(Number(v))} />
+              <XAxis dataKey="ts" tickLine={false} axisLine={false} tickMargin={8} minTickGap={200} interval="preserveStartEnd" tickFormatter={(v) => formatRelativeTime(Number(v), Number(chartData[chartData.length - 1]?.ts))} />
               <YAxis tickLine={false} axisLine={false} mirror tickMargin={-15} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
               <Area isAnimationActive={false} dataKey="v" type="step" fill="hsl(var(--chart-1))" fillOpacity={0.3} stroke="hsl(var(--chart-1))" />
             </AreaChart>
@@ -275,42 +242,8 @@ function CpuChart({ uuid, history, server }: { uuid: string; history: ServerData
 /* ── Mem Chart (with swap overlay) ── */
 function MemChart({ uuid, history, server }: { uuid: string; history: ServerDataWithTimestamp[]; server: ServerInfo }) {
   const { t } = useLocale()
-  const [chartData, setChartData] = useState<{ ts: string; mem: number; swap: number }[]>([])
-  const initialized = useRef(false)
-
-  useEffect(() => {
-    if (!initialized.current && history.length > 0) {
-      const data = history.map((h) => {
-        const s = h.data.servers.find((s) => s.uuid === uuid)
-        if (!s) return null
-        return { ts: h.timestamp.toString(), mem: getMemPercent(s), swap: getSwapPercent(s) }
-      }).filter(Boolean).reverse() as { ts: string; mem: number; swap: number }[]
-      setChartData(data)
-      initialized.current = true
-    }
-  }, [history.length])
-
-  useEffect(() => {
-    if (!initialized.current || history.length === 0) return
-    const latest = history[0]
-    const s = latest.data.servers.find((s) => s.uuid === uuid)
-    if (!s) return
-    const timestamp = latest.timestamp.toString()
-    setChartData((prev) => {
-      if (prev[prev.length - 1]?.ts === timestamp) return prev
-      let newData: { ts: string; mem: number; swap: number }[]
-      if (prev.length === 0) {
-        newData = [
-          { ts: timestamp, mem: getMemPercent(s), swap: getSwapPercent(s) },
-          { ts: timestamp, mem: getMemPercent(s), swap: getSwapPercent(s) },
-        ]
-      } else {
-        newData = [...prev, { ts: timestamp, mem: getMemPercent(s), swap: getSwapPercent(s) }]
-      }
-      if (newData.length > 30) newData.shift()
-      return newData
-    })
-  }, [history[0]?.timestamp])
+  const chartData = useMemo(() => getServerHistory(history, uuid)
+    .map(({ ts, server }) => ({ ts, mem: getMemPercent(server), swap: getSwapPercent(server) })), [history, uuid])
 
   const mem = getMemPercent(server)
   const swap = getSwapPercent(server)
@@ -362,7 +295,7 @@ function MemChart({ uuid, history, server }: { uuid: string; history: ServerData
           <ChartContainer config={chartConfig} className="aspect-auto h-[130px] w-full">
             <AreaChart accessibilityLayer data={chartData} margin={{ top: 12, left: 12, right: 12 }}>
               <CartesianGrid vertical={false} />
-              <XAxis dataKey="ts" tickLine={false} axisLine={false} tickMargin={8} minTickGap={200} interval="preserveStartEnd" tickFormatter={(v) => formatRelativeTime(Number(v))} />
+              <XAxis dataKey="ts" tickLine={false} axisLine={false} tickMargin={8} minTickGap={200} interval="preserveStartEnd" tickFormatter={(v) => formatRelativeTime(Number(v), Number(chartData[chartData.length - 1]?.ts))} />
               <YAxis tickLine={false} axisLine={false} mirror tickMargin={-15} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
               <Area isAnimationActive={false} dataKey="mem" type="step" fill="hsl(var(--chart-8))" fillOpacity={0.3} stroke="hsl(var(--chart-8))" />
               <Area isAnimationActive={false} dataKey="swap" type="step" fill="hsl(var(--chart-10))" fillOpacity={0.3} stroke="hsl(var(--chart-10))" />
@@ -377,42 +310,8 @@ function MemChart({ uuid, history, server }: { uuid: string; history: ServerData
 /* ── Disk Chart (with used/total) ── */
 function DiskChart({ uuid, history, server }: { uuid: string; history: ServerDataWithTimestamp[]; server: ServerInfo }) {
   const { t } = useLocale()
-  const [chartData, setChartData] = useState<{ ts: string; v: number }[]>([])
-  const initialized = useRef(false)
-
-  useEffect(() => {
-    if (!initialized.current && history.length > 0) {
-      const data = history.map((h) => {
-        const s = h.data.servers.find((s) => s.uuid === uuid)
-        if (!s) return null
-        return { ts: h.timestamp.toString(), v: getDiskPercent(s) }
-      }).filter(Boolean).reverse() as { ts: string; v: number }[]
-      setChartData(data)
-      initialized.current = true
-    }
-  }, [history.length])
-
-  useEffect(() => {
-    if (!initialized.current || history.length === 0) return
-    const latest = history[0]
-    const s = latest.data.servers.find((s) => s.uuid === uuid)
-    if (!s) return
-    const timestamp = latest.timestamp.toString()
-    setChartData((prev) => {
-      if (prev[prev.length - 1]?.ts === timestamp) return prev
-      let newData: { ts: string; v: number }[]
-      if (prev.length === 0) {
-        newData = [
-          { ts: timestamp, v: getDiskPercent(s) },
-          { ts: timestamp, v: getDiskPercent(s) },
-        ]
-      } else {
-        newData = [...prev, { ts: timestamp, v: getDiskPercent(s) }]
-      }
-      if (newData.length > 30) newData.shift()
-      return newData
-    })
-  }, [history[0]?.timestamp])
+  const chartData = useMemo(() => getServerHistory(history, uuid)
+    .map(({ ts, server }) => ({ ts, v: getDiskPercent(server) })), [history, uuid])
 
   const disk = getDiskPercent(server)
 
@@ -443,7 +342,7 @@ function DiskChart({ uuid, history, server }: { uuid: string; history: ServerDat
           <ChartContainer config={chartConfig} className="aspect-auto h-[130px] w-full">
             <AreaChart accessibilityLayer data={chartData} margin={{ top: 12, left: 12, right: 12 }}>
               <CartesianGrid vertical={false} />
-              <XAxis dataKey="ts" tickLine={false} axisLine={false} tickMargin={8} minTickGap={200} interval="preserveStartEnd" tickFormatter={(v) => formatRelativeTime(Number(v))} />
+              <XAxis dataKey="ts" tickLine={false} axisLine={false} tickMargin={8} minTickGap={200} interval="preserveStartEnd" tickFormatter={(v) => formatRelativeTime(Number(v), Number(chartData[chartData.length - 1]?.ts))} />
               <YAxis tickLine={false} axisLine={false} mirror tickMargin={-15} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
               <Area isAnimationActive={false} dataKey="v" type="step" fill="hsl(var(--chart-5))" fillOpacity={0.3} stroke="hsl(var(--chart-5))" />
             </AreaChart>
@@ -455,7 +354,7 @@ function DiskChart({ uuid, history, server }: { uuid: string; history: ServerDat
 }
 
 /* ── Network Chart ── */
-function NetworkRealtimeChart({ server, history, recent }: { server: ServerInfo; history: ServerDataWithTimestamp[]; recent: NetworkSpeedSample[] }) {
+function NetworkRealtimeChart({ server, recent }: { server: ServerInfo; recent: NetworkSpeedSample[] }) {
   const { t } = useLocale()
   const [metricHistory, setMetricHistory] = useState<NetworkSpeedSample[]>([])
   useEffect(() => {
@@ -467,7 +366,7 @@ function NetworkRealtimeChart({ server, history, recent }: { server: ServerInfo;
     return () => controller.abort()
   }, [server.uuid])
   const samples = useMemo(() => combineNetworkHistory(metricHistory, recent, Date.now()), [metricHistory, recent])
-  const chartData = useMemo(() => buildNetworkChartData(history, server, samples), [history, server, samples])
+  const chartData = useMemo(() => buildNetworkChartData(samples), [samples])
 
   const axisMax = getNetworkAxisMax(chartData)
   const chartConfig = { upload: { label: "Upload" }, download: { label: "Download" } } satisfies ChartConfig
@@ -497,7 +396,7 @@ function NetworkRealtimeChart({ server, history, recent }: { server: ServerInfo;
           <ChartContainer config={chartConfig} className="aspect-auto h-[130px] w-full">
             <LineChart accessibilityLayer data={chartData} margin={{ top: 12, left: 12, right: 12 }}>
               <CartesianGrid vertical={false} />
-              <XAxis dataKey="ts" tickLine={false} axisLine={false} tickMargin={8} minTickGap={200} interval="preserveStartEnd" tickFormatter={(v) => formatRelativeTime(Number(v))} />
+              <XAxis dataKey="ts" tickLine={false} axisLine={false} tickMargin={8} minTickGap={200} interval="preserveStartEnd" tickFormatter={(v) => formatRelativeTime(Number(v), Number(chartData[chartData.length - 1]?.ts))} />
               <YAxis tickLine={false} axisLine={false} mirror tickMargin={-15} type="number" ticks={[0, axisMax]} domain={[0, axisMax]} tickFormatter={(v) => `${Number(v).toFixed(0)}M/s`} />
               <Line isAnimationActive={false} dataKey="upload" type="linear" stroke="hsl(var(--chart-1))" strokeWidth={1} dot={false} />
               <Line isAnimationActive={false} dataKey="download" type="linear" stroke="hsl(var(--chart-4))" strokeWidth={1} dot={false} />
@@ -511,42 +410,8 @@ function NetworkRealtimeChart({ server, history, recent }: { server: ServerInfo;
 
 /* ── Connect Chart (TCP/UDP) ── */
 function ConnRealtimeChart({ uuid, history }: { uuid: string; history: ServerDataWithTimestamp[] }) {
-  const [chartData, setChartData] = useState<{ ts: string; tcp: number; udp: number }[]>([])
-  const initialized = useRef(false)
-
-  useEffect(() => {
-    if (!initialized.current && history.length > 0) {
-      const data = history.map((h) => {
-        const s = h.data.servers.find((s) => s.uuid === uuid)
-        if (!s) return null
-        return { ts: h.timestamp.toString(), tcp: s.status.tcpConn, udp: s.status.udpConn }
-      }).filter(Boolean).reverse() as { ts: string; tcp: number; udp: number }[]
-      setChartData(data)
-      initialized.current = true
-    }
-  }, [history.length])
-
-  useEffect(() => {
-    if (!initialized.current || history.length === 0) return
-    const latest = history[0]
-    const s = latest.data.servers.find((s) => s.uuid === uuid)
-    if (!s) return
-    const timestamp = latest.timestamp.toString()
-    setChartData((prev) => {
-      if (prev[prev.length - 1]?.ts === timestamp) return prev
-      let newData: { ts: string; tcp: number; udp: number }[]
-      if (prev.length === 0) {
-        newData = [
-          { ts: timestamp, tcp: s.status.tcpConn, udp: s.status.udpConn },
-          { ts: timestamp, tcp: s.status.tcpConn, udp: s.status.udpConn },
-        ]
-      } else {
-        newData = [...prev, { ts: timestamp, tcp: s.status.tcpConn, udp: s.status.udpConn }]
-      }
-      if (newData.length > 30) newData.shift()
-      return newData
-    })
-  }, [history[0]?.timestamp])
+  const chartData = useMemo(() => getServerHistory(history, uuid)
+    .map(({ ts, server }) => ({ ts, tcp: server.status.tcpConn, udp: server.status.udpConn })), [history, uuid])
 
   const current = chartData.length > 0 ? chartData[chartData.length - 1] : { tcp: 0, udp: 0 }
 
@@ -577,7 +442,7 @@ function ConnRealtimeChart({ uuid, history }: { uuid: string; history: ServerDat
           <ChartContainer config={chartConfig} className="aspect-auto h-[130px] w-full">
             <LineChart accessibilityLayer data={chartData} margin={{ top: 12, left: 12, right: 12 }}>
               <CartesianGrid vertical={false} />
-              <XAxis dataKey="ts" tickLine={false} axisLine={false} tickMargin={8} minTickGap={200} interval="preserveStartEnd" tickFormatter={(v) => formatRelativeTime(Number(v))} />
+              <XAxis dataKey="ts" tickLine={false} axisLine={false} tickMargin={8} minTickGap={200} interval="preserveStartEnd" tickFormatter={(v) => formatRelativeTime(Number(v), Number(chartData[chartData.length - 1]?.ts))} />
               <YAxis tickLine={false} axisLine={false} mirror tickMargin={-15} type="number" interval="preserveStartEnd" />
               <Line isAnimationActive={false} dataKey="tcp" type="linear" stroke="hsl(var(--chart-1))" strokeWidth={1} dot={false} />
               <Line isAnimationActive={false} dataKey="udp" type="linear" stroke="hsl(var(--chart-4))" strokeWidth={1} dot={false} />
@@ -592,42 +457,8 @@ function ConnRealtimeChart({ uuid, history }: { uuid: string; history: ServerDat
 /* ── Process Chart ── */
 function ProcessChart({ uuid, history, server }: { uuid: string; history: ServerDataWithTimestamp[]; server: ServerInfo }) {
   const { t } = useLocale()
-  const [chartData, setChartData] = useState<{ ts: string; v: number }[]>([])
-  const initialized = useRef(false)
-
-  useEffect(() => {
-    if (!initialized.current && history.length > 0) {
-      const data = history.map((h) => {
-        const s = h.data.servers.find((s) => s.uuid === uuid)
-        if (!s) return null
-        return { ts: h.timestamp.toString(), v: s.status.process }
-      }).filter(Boolean).reverse() as { ts: string; v: number }[]
-      setChartData(data)
-      initialized.current = true
-    }
-  }, [history.length])
-
-  useEffect(() => {
-    if (!initialized.current || history.length === 0) return
-    const latest = history[0]
-    const s = latest.data.servers.find((s) => s.uuid === uuid)
-    if (!s) return
-    const timestamp = latest.timestamp.toString()
-    setChartData((prev) => {
-      if (prev[prev.length - 1]?.ts === timestamp) return prev
-      let newData: { ts: string; v: number }[]
-      if (prev.length === 0) {
-        newData = [
-          { ts: timestamp, v: s.status.process },
-          { ts: timestamp, v: s.status.process },
-        ]
-      } else {
-        newData = [...prev, { ts: timestamp, v: s.status.process }]
-      }
-      if (newData.length > 30) newData.shift()
-      return newData
-    })
-  }, [history[0]?.timestamp])
+  const chartData = useMemo(() => getServerHistory(history, uuid)
+    .map(({ ts, server }) => ({ ts, v: server.status.process })), [history, uuid])
 
   const chartConfig = { process: { label: "Process" } } satisfies ChartConfig
 
@@ -644,7 +475,7 @@ function ProcessChart({ uuid, history, server }: { uuid: string; history: Server
           <ChartContainer config={chartConfig} className="aspect-auto h-[130px] w-full">
             <AreaChart accessibilityLayer data={chartData} margin={{ top: 12, left: 12, right: 12 }}>
               <CartesianGrid vertical={false} />
-              <XAxis dataKey="ts" tickLine={false} axisLine={false} tickMargin={8} minTickGap={200} interval="preserveStartEnd" tickFormatter={(v) => formatRelativeTime(Number(v))} />
+              <XAxis dataKey="ts" tickLine={false} axisLine={false} tickMargin={8} minTickGap={200} interval="preserveStartEnd" tickFormatter={(v) => formatRelativeTime(Number(v), Number(chartData[chartData.length - 1]?.ts))} />
               <YAxis tickLine={false} axisLine={false} mirror tickMargin={-15} />
               <Area isAnimationActive={false} dataKey="v" type="step" fill="hsl(var(--chart-2))" fillOpacity={0.3} stroke="hsl(var(--chart-2))" />
             </AreaChart>
@@ -829,49 +660,43 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
       setFormattedData([...merged.values()].sort((a, b) => a.created_at - b.created_at))
     }
     const load = async () => {
+      if (refreshing || cancelled || document.visibilityState === "hidden") return
+      refreshing = true
       try {
-        setLoading(true)
-        setError(null)
-        const data = await fetchPingChartData(uuid, 24, controller.signal)
-        if (cancelled) return
-        if (data.tasks.length === 0 || data.points.length === 0) {
-          setError("no_data")
-          setLoading(false)
-          return
-        }
-        showData(data)
-        setLoading(false)
-        refreshTimer = setInterval(() => {
-          if (refreshing || cancelled || !currentData) return
-          refreshing = true
-          const refresh = async () => {
-            try {
-              refreshCount++
-              if (refreshCount % 20 === 0) {
-                const next = await fetchPingChartData(uuid, 24, controller.signal)
-                if (!cancelled && next.points.length > 0) showData(next)
-              } else {
-                const recent = await fetchRecentPingChartPoints(uuid, 1, controller.signal)
-                if (!cancelled && recent.length > 0 && currentData) {
-                  showData({ ...currentData, points: mergePingPoints(currentData.points, recent) })
-                }
-              }
-            } catch {
-              // Keep the last known chart when a refresh fails.
-            } finally {
-              refreshing = false
-            }
+        refreshCount++
+        if (!currentData?.points.length || refreshCount % 20 === 0) {
+          const next = await fetchPingChartData(uuid, 24, controller.signal)
+          if (!cancelled) {
+            showData(next)
+            setError(next.points.length > 0 ? null : "no_data")
           }
-          void refresh()
-        }, 15_000)
-      } catch {
-        if (!cancelled) {
-          setError("fetch_error")
-          setLoading(false)
+        } else {
+          const [recent, stats] = await Promise.all([
+            fetchRecentPingChartPoints(uuid, 1, controller.signal),
+            fetchPingMetricStats(uuid, 24, controller.signal),
+          ])
+          if (!cancelled) {
+            const points = mergePingPoints(currentData.points, recent, false, Date.now() - 24 * 3_600_000)
+            const byTask = new Map(stats.stats.filter((stat) => stat.entity_id === uuid).map((stat) => [stat.task_id, stat]))
+            const tasks = currentData.tasks.map((task) => {
+              const stat = byTask.get(task.id)
+              return stat ? { ...task, loss: stat.loss, min: stat.min, max: stat.max, latest: stat.latest } : task
+            })
+            showData({ tasks, points })
+            setError(points.length > 0 ? null : "no_data")
+          }
         }
+      } catch {
+        if (!cancelled && !currentData) setError("fetch_error")
+      } finally {
+        refreshing = false
+        if (!cancelled) setLoading(false)
       }
     }
+    setLoading(true)
+    setError(null)
     void load()
+    refreshTimer = setInterval(() => void load(), 15_000)
     return () => {
       cancelled = true
       if (refreshTimer) clearInterval(refreshTimer)
@@ -937,9 +762,9 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
             const delays = data
               .map((item) => item.avg_delay)
               .filter((value): value is number => typeof value === "number")
-            const lastDelay = delays[delays.length - 1] ?? 0
-            const minDelay = delays.length > 0 ? Math.min(...delays) : 0
-            const maxDelay = delays.length > 0 ? Math.max(...delays) : 0
+            const lastDelay = task?.latest ?? delays[delays.length - 1] ?? 0
+            const minDelay = task?.min ?? (delays.length > 0 ? Math.min(...delays) : 0)
+            const maxDelay = task?.max ?? (delays.length > 0 ? Math.max(...delays) : 0)
             return (
               <button
                 type="button"

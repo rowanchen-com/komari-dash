@@ -1,4 +1,4 @@
-// Komari 1.5.0 RPC2 contracts used by this theme.
+// Komari 1.6.0 RPC2 contracts used by this theme.
 
 export interface KomariNode {
   uuid: string
@@ -86,6 +86,9 @@ export interface PingMetricStat {
   name?: string
   interval?: number
   loss: number
+  min?: number
+  max?: number
+  latest?: number
 }
 
 export interface PingMetricStatsResponse {
@@ -105,6 +108,9 @@ export interface PingChartTask {
   name: string
   interval: number
   loss: number
+  min?: number
+  max?: number
+  latest?: number
 }
 
 export interface PingChartData {

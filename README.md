@@ -13,31 +13,37 @@ A modern server monitoring dashboard theme for [Komari](https://github.com/komar
 - Detailed server pages with CPU, Memory, Disk, Network, Connection, and Process charts
 - Network latency monitoring with ping charts and Peak Cut (EWMA smoothing)
 - Dark / Light theme switching
-- Multi-language support (English, 简体中文, 繁體中文, 日本語)
+- Multi-language support (English, Bahasa Indonesia, 简体中文, 繁體中文, 日本語)
 - Search command palette
 - Responsive design for mobile and desktop
 - OS logo icons (font-logos)
 - Animated circular progress bars
 - Inline and card view modes
 
+## Compatibility
+
+Currently supported and verified with **Komari 1.6.0 only**. Compatibility with older versions is no longer maintained. Support for future Komari versions will be stated here after validation.
+
+Data is read through `/api/rpc2`; the theme does not use legacy `/api/recent/*` or `/api/records/*` routes. The built-in admin and terminal interfaces remain owned by Komari.
+
 ## Installation
 
-1. Go to your Komari dashboard → Settings → Theme
+1. Go to your Komari admin panel → Theme → Theme Management
 2. Upload the `KomariDash.zip` file from the [Releases](../../releases) page
 3. Done
 
 ## Local Development
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
 ## Build
 
 ```bash
-npm run build
-node scripts/zip.mjs
+npm test
+npm run zip
 ```
 
 This generates `KomariDash.zip` ready for upload.

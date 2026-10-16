@@ -20,6 +20,7 @@ const ServerDataContext = createContext<ServerDataContextType | undefined>(undef
 
 export const MAX_HISTORY_LENGTH = 30
 const POLL_INTERVAL = 2000
+const NODE_REFRESH_INTERVAL = 60_000
 
 function hasSameServerSnapshot(prev: ServerInfo, next: ServerInfo): boolean {
   return prev.name === next.name &&
@@ -27,12 +28,14 @@ function hasSameServerSnapshot(prev: ServerInfo, next: ServerInfo): boolean {
     prev.group === next.group &&
     prev.tags === next.tags &&
     prev.weight === next.weight &&
+    prev.hidden === next.hidden &&
     prev.region === next.region &&
     prev.public_remark === next.public_remark &&
     prev.version === next.version &&
     prev.host.os === next.host.os &&
     prev.host.kernel === next.host.kernel &&
     prev.host.cpu === next.host.cpu &&
+    prev.host.cpuCores === next.host.cpuCores &&
     prev.host.gpu === next.host.gpu &&
     prev.host.arch === next.host.arch &&
     prev.host.virtualization === next.host.virtualization &&
@@ -108,6 +111,8 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
     let polling = false
     let timer: ReturnType<typeof setTimeout> | undefined
     let nodes: KomariNode[] = []
+    let nodesLoadedAt = 0
+    let initialized = false
     const controller = new AbortController()
 
     const applyStatuses = (statuses: Record<string, KomariLatestStatus>, recentHistory: Record<string, NetworkSpeedSample[]>, initial = false) => {
@@ -141,16 +146,30 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
     }
 
     const poll = async () => {
-      if (cancelled || polling) return
+      if (cancelled || polling || document.visibilityState === "hidden") return
       polling = true
+      if (timer) clearTimeout(timer)
+      timer = undefined
       try {
-        const latest = await fetchLatestStatuses(controller.signal)
+        const refreshNodes = !initialized || Date.now() - nodesLoadedAt >= NODE_REFRESH_INTERVAL
+        const [nodeList, latest] = await Promise.all([
+          refreshNodes ? fetchNodes(controller.signal) : Promise.resolve(nodes),
+          fetchLatestStatuses(controller.signal),
+        ])
+        if (cancelled) return
+        nodes = nodeList
+        if (refreshNodes) nodesLoadedAt = Date.now()
         const { statuses, history: recentHistory } = await fetchRecentNetworkData(nodes, latest, controller.signal)
-        if (!cancelled) applyStatuses(statuses, recentHistory)
-      } catch {
-        // Keep the last successful snapshot during transient network failures.
+        if (cancelled) return
+        applyStatuses(statuses, recentHistory, !initialized)
+        initialized = true
+        setError(undefined)
+      } catch (pollError) {
+        // Preserve a successful snapshot, but keep retrying an initial failure.
+        if (!cancelled && !initialized) setError(pollError instanceof Error ? pollError : new Error(String(pollError)))
       } finally {
         polling = false
+        if (!cancelled) setIsLoading(false)
         schedulePoll()
       }
     }
@@ -161,30 +180,8 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
       if (document.visibilityState !== "hidden") void poll()
     }
 
-    const init = async () => {
-      try {
-        const [nodeList, latest] = await Promise.all([
-          fetchNodes(controller.signal),
-          fetchLatestStatuses(controller.signal),
-        ])
-        if (cancelled) return
-
-        nodes = nodeList
-        const { statuses, history: recentHistory } = await fetchRecentNetworkData(nodes, latest, controller.signal)
-        if (cancelled) return
-        applyStatuses(statuses, recentHistory, true)
-        setIsLoading(false)
-        schedulePoll()
-      } catch (initError) {
-        if (!cancelled) {
-          setError(initError instanceof Error ? initError : new Error(String(initError)))
-          setIsLoading(false)
-        }
-      }
-    }
-
     document.addEventListener("visibilitychange", handleVisibilityChange)
-    void init()
+    void poll()
 
     return () => {
       cancelled = true
