@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom"
+import { Routes, Route } from "react-router"
 import { lazy, Suspense } from "react"
 import MainLayout from "./layouts/MainLayout"
 import HomePage from "./pages/HomePage"

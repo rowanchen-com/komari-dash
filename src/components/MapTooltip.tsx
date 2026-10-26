@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom"
+import { Link } from "react-router"
 import { memo } from "react"
 import { useTooltip } from "@/context/tooltip-context"
 import { useLocale } from "@/context/locale-context"

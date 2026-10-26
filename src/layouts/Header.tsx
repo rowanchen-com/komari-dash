@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom"
+import { useNavigate } from "react-router"
 import { useCallback, useEffect, useState } from "react"
 import ThemeSwitcher from "@/components/ThemeSwitcher"
 import LanguageSwitcher from "@/components/LanguageSwitcher"

@@ -16,7 +16,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          const isReactPackage = ["react", "react-dom", "react-router-dom"].some((name) =>
+          const isReactPackage = ["react", "react-dom", "react-router"].some((name) =>
             id.includes(`/node_modules/${name}/`),
           )
           if (isReactPackage) {

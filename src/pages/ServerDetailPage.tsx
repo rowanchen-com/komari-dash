@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from "react-router-dom"
+import { useParams, useNavigate } from "react-router"
 import { useServerData, type ServerDataWithTimestamp } from "@/context/server-data-context"
 import { useEffect, useRef, useState, useCallback, useMemo, Component, type ReactNode } from "react"
 import countries from "i18n-iso-countries"

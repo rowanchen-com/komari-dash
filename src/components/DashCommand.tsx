@@ -1,5 +1,5 @@
 import { Home, Languages, Moon, Sun, SunMoon } from "lucide-react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate } from "react-router"
 import { useEffect, useState } from "react"
 import { useCommand } from "@/context/command-context"
 import { useServerData } from "@/context/server-data-context"
