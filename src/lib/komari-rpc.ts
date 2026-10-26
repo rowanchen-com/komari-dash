@@ -1,4 +1,5 @@
-import { rpcCall } from "@/lib/rpc2"
+import { isAuthorizationError, rpcCall } from "@/lib/rpc2"
+import { QueryCache } from "@/lib/query-cache"
 import type {
   KomariLatestStatus,
   KomariNode,
@@ -177,10 +178,26 @@ export interface NetworkSpeedSample {
   timestamp: number
   up: number
   down: number
+  raw?: true
 }
 
 const NETWORK_IN_METRIC = "net.in.rate"
 const NETWORK_OUT_METRIC = "net.out.rate"
+const networkCache = new QueryCache<NetworkSpeedSample[]>(30_000, 16, (samples) => samples.length > 0)
+const pingCache = new QueryCache<PingChartData>(5 * 60_000, 16, (data) => data.points.length > 0)
+
+export function clearHistoryCaches() {
+  networkCache.clear()
+  pingCache.clear()
+}
+
+export function getCachedPingChartData(uuid: string, hours = 24) {
+  return pingCache.peek(`${uuid}:${hours}`)
+}
+
+export function updateCachedPingChartData(uuid: string, data: PingChartData, hours = 24) {
+  pingCache.update(`${uuid}:${hours}`, data)
+}
 
 export function buildNetworkMetricHistory(value: unknown, uuid: string): NetworkSpeedSample[] {
   if (!isRecord(value) || !Array.isArray(value.series)) return []
@@ -202,7 +219,11 @@ export function buildNetworkMetricHistory(value: unknown, uuid: string): Network
   return [...points.values()].sort((a, b) => a.timestamp - b.timestamp)
 }
 
-export async function fetchNetworkMetricHistory(uuid: string, signal?: AbortSignal): Promise<NetworkSpeedSample[]> {
+export function fetchNetworkMetricHistory(uuid: string, signal?: AbortSignal): Promise<NetworkSpeedSample[]> {
+  return networkCache.load(uuid, (sharedSignal) => loadNetworkMetricHistory(uuid, sharedSignal), signal)
+}
+
+async function loadNetworkMetricHistory(uuid: string, signal: AbortSignal): Promise<NetworkSpeedSample[]> {
   const [history, recent] = await Promise.all([0.25, RAW_METRIC_WINDOW_HOURS].map((hours) =>
     rpcCall<Record<string, unknown>, QueryMetricsResponse>("public:queryMetrics", {
       metric_keys: [NETWORK_IN_METRIC, NETWORK_OUT_METRIC],
@@ -212,7 +233,7 @@ export async function fetchNetworkMetricHistory(uuid: string, signal?: AbortSign
       aggregation: "max",
       fill_empty: false,
     }, { signal, timeout: 30000 })))
-  const raw = buildNetworkMetricHistory(recent, uuid)
+  const raw = buildNetworkMetricHistory(recent, uuid).map((sample) => ({ ...sample, raw: true as const }))
   const firstRawTime = raw[0]?.timestamp ?? Infinity
   return [...buildNetworkMetricHistory(history, uuid).filter((sample) => sample.timestamp < firstRawTime), ...raw]
 }
@@ -243,7 +264,7 @@ export async function fetchRecentNetworkData(
       const samples = buildRecentNetworkHistory(result, node.uuid)
       return samples.length > 0 ? { uuid: node.uuid, samples } : null
     } catch (error) {
-      if (signal?.aborted) throw error
+      if (signal?.aborted || isAuthorizationError(error)) throw error
       return null
     }
   }))
@@ -421,7 +442,11 @@ export function fetchPingMetricStats(uuid: string, hours: number, signal?: Abort
   }, { signal, timeout: 30000 })
 }
 
-export async function fetchPingChartData(uuid: string, hours = 24, signal?: AbortSignal): Promise<PingChartData> {
+export function fetchPingChartData(uuid: string, hours = 24, signal?: AbortSignal, force = false): Promise<PingChartData> {
+  return pingCache.load(`${uuid}:${hours}`, (sharedSignal) => loadPingChartData(uuid, hours, sharedSignal), signal, force)
+}
+
+async function loadPingChartData(uuid: string, hours: number, signal: AbortSignal): Promise<PingChartData> {
   const [tasks, metrics, stats, recent] = await Promise.all([
     rpcCall<undefined, PublicPingTask[]>("public:getPublicPingTasks", undefined, { signal }),
     fetchPingMetrics(uuid, hours, signal),

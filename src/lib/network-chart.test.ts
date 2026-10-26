@@ -69,6 +69,12 @@ describe("buildNetworkChartData", () => {
     ])
   })
 
+  it("retains exact backend samples between slower overview polls", () => {
+    const fine = { timestamp: 65_000, up: 0.125, down: 195, raw: true as const }
+    const live = [{ timestamp: 60_000, up: 1, down: 2 }, { timestamp: 70_000, up: 3, down: 4 }]
+    expect(combineNetworkHistory([fine], live, 80_000)).toEqual([live[0], fine, live[1]])
+  })
+
   it("keeps the original whole-M axis while containing upload and download peaks", () => {
     expect(getNetworkAxisMax([{ ts: "0", upload: 0.03, download: 0.01 }])).toBe(1)
     expect(getNetworkAxisMax([{ ts: "0", upload: 3.01, download: 0.01 }])).toBe(4)

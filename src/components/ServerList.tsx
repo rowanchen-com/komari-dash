@@ -49,6 +49,8 @@ export default function ServerListClient() {
   const [mapMounted, setMapMounted] = useState(false)
   const [mapExpanded, setMapExpanded] = useState(false)
   const [inline, setInline] = useState("0")
+  const layoutTarget = useRef("0")
+  const layoutTransition = useRef<ViewTransition | null>(null)
   const [listHeight, setListHeight] = useState<number>()
   const mapCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -57,7 +59,10 @@ export default function ServerListClient() {
     setTag(saved)
 
     const inlineState = localStorage.getItem("inline")
-    if (inlineState !== null) setInline(inlineState)
+    if (inlineState === "0" || inlineState === "1") {
+      layoutTarget.current = inlineState
+      setInline(inlineState)
+    }
 
     const showMapState = localStorage.getItem("showMap")
     if (showMapState === "true") setShowMap(true)
@@ -101,6 +106,8 @@ export default function ServerListClient() {
 
   useEffect(() => () => {
     if (mapCloseTimer.current) clearTimeout(mapCloseTimer.current)
+    layoutTransition.current?.skipTransition()
+    layoutTransition.current = null
   }, [])
 
   const handleMapToggle = () => {
@@ -115,13 +122,26 @@ export default function ServerListClient() {
   }
 
   const handleLayoutToggle = () => {
-    const next = inline === "0" ? "1" : "0"
-    if (document.startViewTransition && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      document.startViewTransition(() => flushSync(() => setInline(next)))
-    } else {
-      setInline(next)
-    }
+    const next = layoutTarget.current === "0" ? "1" : "0"
+    layoutTarget.current = next
     localStorage.setItem("inline", next)
+    layoutTransition.current?.skipTransition()
+    const update = () => flushSync(() => setInline(layoutTarget.current))
+    const canAnimate = typeof document.startViewTransition === "function" &&
+      CSS.supports("view-transition-class", "server-card") &&
+      CSS.supports("selector(:active-view-transition-type(server-layout))") &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    if (!canAnimate) { update(); return }
+    try {
+      const transition = document.startViewTransition({ update, types: ["server-layout"] })
+      layoutTransition.current = transition
+      void transition.ready.catch(() => {})
+      void transition.finished.catch(() => {}).then(() => {
+        if (layoutTransition.current === transition) layoutTransition.current = null
+      })
+    } catch {
+      update()
+    }
   }
 
   const handleTagChange = (newTag: string) => {
@@ -228,16 +248,19 @@ export default function ServerListClient() {
             </div>
           </div>
         )}
+        {/* Contain the scroll gutter margins without clipping card shadows. */}
         <div
-          className="min-w-0 transition-[height] duration-200 ease-out motion-reduce:transition-none [clip-path:inset(-12px)]"
+          className="server-list-height flow-root min-w-0 motion-reduce:transition-none [clip-path:inset(-12px)]"
           style={listHeight === undefined ? undefined : { height: listHeight }}
         >
           {inline === "1" ? (
-            <section ref={containerRef} className="scrollbar-hidden flex min-w-0 flex-col gap-2 overflow-x-auto p-px">
-              {filtered.map((server) => (
-                <ServerCardInline key={server.uuid} server={server} />
-              ))}
-            </section>
+            <div className="server-list-scroll scrollbar-hidden -m-3 min-w-0 overflow-x-auto p-3">
+              <section ref={containerRef} className="flex min-w-0 flex-col gap-2 p-px">
+                {filtered.map((server) => (
+                  <ServerCardInline key={server.uuid} server={server} />
+                ))}
+              </section>
+            </div>
           ) : (
             <section ref={containerRef} className="grid grid-cols-1 gap-2 p-px md:grid-cols-2">
               {filtered.map((server) => (

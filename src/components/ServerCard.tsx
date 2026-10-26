@@ -2,6 +2,7 @@ import { Link } from "react-router-dom"
 import { memo } from "react"
 import ServerFlag from "@/components/ServerFlag"
 import ServerUsageBar from "@/components/ServerUsageBar"
+import { ServerCardField } from "@/components/ServerCardField"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import type { ServerInfo } from "@/types/komari"
@@ -30,7 +31,7 @@ export default memo(function ServerCard({ server }: { server: ServerInfo }) {
 
   if (!server.online) {
     return (
-      <Link to={`/server/${server.uuid}`} onClick={saveSession} style={{ viewTransitionName: `server-${server.uuid}` }}>
+      <Link className="server-card-link" to={`/server/${server.uuid}`} onClick={saveSession} style={{ viewTransitionName: `server-${server.uuid}` }}>
         <Card
           className={cn(
             "flex cursor-pointer flex-col items-center justify-start gap-3 p-3 transition-all hover:shadow-sm hover:ring-stone-300 md:px-5 dark:hover:ring-stone-700",
@@ -41,7 +42,7 @@ export default memo(function ServerCard({ server }: { server: ServerInfo }) {
             },
           )}
         >
-          <section
+          <ServerCardField as="section" uuid={server.uuid} name="identity"
             className={cn("grid items-center gap-2", {
               "lg:w-40": !fixedTopServerName,
             })}
@@ -56,14 +57,14 @@ export default memo(function ServerCard({ server }: { server: ServerInfo }) {
                 {server.name}
               </p>
             </div>
-          </section>
+          </ServerCardField>
         </Card>
       </Link>
     )
   }
 
   return (
-    <Link to={`/server/${server.uuid}`} onClick={saveSession} style={{ viewTransitionName: `server-${server.uuid}` }}>
+    <Link className="server-card-link" to={`/server/${server.uuid}`} onClick={saveSession} style={{ viewTransitionName: `server-${server.uuid}` }}>
       <Card
         className={cn(
           "flex cursor-pointer flex-col items-center justify-start gap-3 p-3 transition-all hover:shadow-sm hover:ring-stone-300 md:px-5 dark:hover:ring-stone-700",
@@ -74,7 +75,7 @@ export default memo(function ServerCard({ server }: { server: ServerInfo }) {
           },
         )}
       >
-        <section
+        <ServerCardField as="section" uuid={server.uuid} name="identity"
           className={cn("grid items-center gap-2", {
             "lg:w-40": !fixedTopServerName,
           })}
@@ -89,7 +90,7 @@ export default memo(function ServerCard({ server }: { server: ServerInfo }) {
               {server.name}
             </p>
           </div>
-        </section>
+        </ServerCardField>
         <div className="flex flex-col gap-2">
           <section
             className={cn("grid grid-cols-5 items-center gap-3", {
@@ -97,7 +98,7 @@ export default memo(function ServerCard({ server }: { server: ServerInfo }) {
             })}
           >
             {fixedTopServerName && (
-              <div className="col-span-1 hidden items-center gap-2 lg:flex lg:flex-row">
+              <ServerCardField uuid={server.uuid} name="system" className="col-span-1 hidden items-center gap-2 lg:flex lg:flex-row">
                 <div className="font-semibold text-xs">
                   {IsWindows(server.host.os) ? (
                     <MageMicrosoftWindows className="size-[10px]" />
@@ -111,38 +112,40 @@ export default memo(function ServerCard({ server }: { server: ServerInfo }) {
                     {IsWindows(server.host.os) ? "Windows" : GetOsName(server.host.os)}
                   </div>
                 </div>
-              </div>
+              </ServerCardField>
             )}
-            <div className="flex w-14 flex-col">
+            <ServerCardField uuid={server.uuid} name="cpu" className="flex w-14 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "CPU")}</p>
               <div className="flex items-center font-semibold text-xs">{cpu.toFixed(2)}%</div>
               <ServerUsageBar value={cpu} />
-            </div>
-            <div className="flex w-14 flex-col">
+            </ServerCardField>
+            <ServerCardField uuid={server.uuid} name="memory" className="flex w-14 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "Mem")}</p>
               <div className="flex items-center font-semibold text-xs">{mem.toFixed(2)}%</div>
               <ServerUsageBar value={mem} />
-            </div>
-            <div className="flex w-14 flex-col">
+            </ServerCardField>
+            <ServerCardField uuid={server.uuid} name="disk" className="flex w-14 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "STG")}</p>
               <div className="flex items-center font-semibold text-xs">{stg.toFixed(2)}%</div>
               <ServerUsageBar value={stg} />
-            </div>
-            <div className="flex w-14 flex-col">
+            </ServerCardField>
+            <ServerCardField uuid={server.uuid} name="upload" className="flex w-14 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "Upload")}</p>
               <div className="min-w-0 font-semibold text-[11px] leading-tight">{up >= 1024 ? `${(up / 1024).toFixed(2)}G/s` : `${up.toFixed(2)}M/s`}</div>
-            </div>
-            <div className="flex w-14 flex-col">
+            </ServerCardField>
+            <ServerCardField uuid={server.uuid} name="download" className="flex w-14 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "Download")}</p>
               <div className="min-w-0 font-semibold text-[11px] leading-tight">{down >= 1024 ? `${(down / 1024).toFixed(2)}G/s` : `${down.toFixed(2)}M/s`}</div>
-            </div>
+            </ServerCardField>
           </section>
           {showNetTransfer && (
             <section className="flex items-center justify-between gap-1">
-              <Badge variant="secondary" className="flex-1 items-center justify-center text-nowrap rounded-[8px] border-muted-50 text-[11px] shadow-md shadow-neutral-200/30 dark:shadow-none">
+              <Badge variant="secondary" className="server-card-field flex-1 items-center justify-center text-nowrap rounded-[8px] border-muted-50 text-[11px] shadow-md shadow-neutral-200/30 dark:shadow-none"
+                style={{ viewTransitionName: `server-${server.uuid}-transfer-upload` }}>
                 {t("ServerCard", "Upload")}:{formatBytes(server.status.netOutTransfer)}
               </Badge>
-              <Badge variant="outline" className="flex-1 items-center justify-center text-nowrap rounded-[8px] text-[11px] shadow-md shadow-neutral-200/30 dark:shadow-none">
+              <Badge variant="outline" className="server-card-field flex-1 items-center justify-center text-nowrap rounded-[8px] text-[11px] shadow-md shadow-neutral-200/30 dark:shadow-none"
+                style={{ viewTransitionName: `server-${server.uuid}-transfer-download` }}>
                 {t("ServerCard", "Download")}:{formatBytes(server.status.netInTransfer)}
               </Badge>
             </section>

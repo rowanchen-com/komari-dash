@@ -22,13 +22,13 @@
 
 ## 兼容性
 
-当前仅适配并验证 **Komari 1.6.0**，不再维护旧版本兼容。后续 Komari 版本会在验证后更新此处的支持说明。
+当前适配并验证 **Komari 1.6.0 和 1.6.1**，不再维护更早版本兼容。后续 Komari 版本会在验证后更新此处的支持说明。
 
 主题统一通过 `/api/rpc2` 读取数据，不再调用旧的 `/api/recent/*` 和 `/api/records/*` 路由。后台与终端继续由 Komari 内置界面接管。
 
 ## 安装
 
-1. 进入 Komari 后台 → 主题 → 主题管理
+1. 在 Komari 管理后台打开主题管理页面
 2. 上传 [Releases](../../releases) 页面中的 `KomariDash.zip` 文件
 3. 完成
 
@@ -39,14 +39,16 @@ npm ci
 npm run dev
 ```
 
-## 构建
+## 正式生产构建
 
 ```bash
-npm test
+npm ci
 npm run zip
 ```
 
 生成的 `KomariDash.zip` 即可上传使用。
+
+发布前可运行 `npm test` 进行检查；测试不会把正式构建变成测试版。
 
 ## 配置项
 

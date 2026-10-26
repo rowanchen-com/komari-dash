@@ -202,18 +202,92 @@
   opacity: 1;
 }
 
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation: none;
+.server-card-link {
+  view-transition-class: server-card;
+  view-transition-group: contain;
 }
 
-::view-transition-group(*) {
+.server-card-field {
+  view-transition-class: server-field;
+}
+
+.server-list-height {
+  transition: height 280ms ease;
+}
+
+html:active-view-transition-type(server-layout) {
+  view-transition-name: none;
+}
+
+/* Keep rapid clicks on the live controls, not the snapshot overlay. */
+html:active-view-transition-type(server-layout)::view-transition {
+  pointer-events: none;
+}
+
+::view-transition-group(.server-card),
+::view-transition-group(.server-field) {
   animation-duration: 280ms;
   animation-timing-function: ease;
 }
 
+::view-transition-group(.server-card) {
+  /* Keep the original one-pixel ring and shadow outside the clipped content. */
+  @apply rounded-lg bg-card shadow-md shadow-stone-200/50 ring ring-stone-200;
+  overflow: clip;
+}
+
+html.dark::view-transition-group(.server-card) {
+  @apply shadow-none ring-stone-800;
+}
+
+::view-transition-image-pair(.server-card) {
+  overflow: clip;
+  border-radius: inherit;
+}
+
+::view-transition-old(.server-card),
+::view-transition-new(.server-card),
+::view-transition-old(.server-field) {
+  opacity: 0;
+  animation: none;
+}
+
+/* Resize the shell, but move shared text at its natural pixel size. */
+::view-transition-new(.server-field) {
+  animation: none;
+  width: auto;
+  height: auto;
+  object-fit: none;
+  object-position: left top;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(.server-field):only-child {
+  width: auto;
+  height: auto;
+  animation: server-field-out 100ms ease-out both;
+}
+
+::view-transition-new(.server-field):only-child {
+  animation: server-field-in 140ms ease-out 140ms both;
+}
+
+@keyframes server-field-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes server-field-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .map-reveal {
+    transition: none;
+  }
+
+  .server-list-height {
     transition: none;
   }
 }

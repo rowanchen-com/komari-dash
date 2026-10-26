@@ -19,10 +19,12 @@ import { getPingChartTicks, smoothPingChartData } from "@/lib/ping-chart"
 import { getServerHistory } from "@/lib/server-history"
 import { useLocale } from "@/context/locale-context"
 import type { PingChartData as KomariPingChartData, PingChartTask, ServerInfo } from "@/types/komari"
-import { fetchNetworkMetricHistory, fetchPingChartData, fetchPingMetricStats, fetchRecentPingChartPoints, mergePingPoints, type NetworkSpeedSample } from "@/lib/komari-rpc"
+import { clearHistoryCaches, fetchNetworkMetricHistory, fetchPingChartData, fetchPingMetricStats, fetchRecentPingChartPoints, getCachedPingChartData, mergePingPoints, updateCachedPingChartData, type NetworkSpeedSample } from "@/lib/komari-rpc"
+import { getRetryDelay, isAuthorizationError } from "@/lib/rpc2"
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ComposedChart, XAxis, YAxis } from "recharts"
 
 countries.registerLocale(enLocale)
+const isPageVisible = () => document.visibilityState !== "hidden"
 
 // Function to get country name, handling both country codes and emoji flags
 function getCountryDisplayName(countryCode: string): string {
@@ -356,15 +358,42 @@ function DiskChart({ uuid, history, server }: { uuid: string; history: ServerDat
 /* ── Network Chart ── */
 function NetworkRealtimeChart({ server, recent }: { server: ServerInfo; recent: NetworkSpeedSample[] }) {
   const { t } = useLocale()
+  const { watchNetwork } = useServerData()
   const [metricHistory, setMetricHistory] = useState<NetworkSpeedSample[]>([])
   useEffect(() => {
     const controller = new AbortController()
+    const unwatch = watchNetwork(server.uuid)
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let loading = false
+    let failures = 0
     setMetricHistory([])
-    void fetchNetworkMetricHistory(server.uuid, controller.signal)
-      .then((samples) => { if (!controller.signal.aborted) setMetricHistory(samples) })
-      .catch(() => {})
-    return () => controller.abort()
-  }, [server.uuid])
+    const load = async () => {
+      if (loading || controller.signal.aborted || !isPageVisible()) return
+      loading = true
+      if (timer) clearTimeout(timer)
+      try {
+        const samples = await fetchNetworkMetricHistory(server.uuid, controller.signal)
+        if (!controller.signal.aborted) setMetricHistory(samples)
+        failures = 0
+      } catch (error) {
+        if (controller.signal.aborted) return
+        if (isAuthorizationError(error)) { clearHistoryCaches(); setMetricHistory([]) }
+        const delay = getRetryDelay(error, ++failures)
+        if (!controller.signal.aborted && delay !== null && isPageVisible()) timer = setTimeout(load, delay)
+      } finally { loading = false }
+    }
+    const resume = () => { if (isPageVisible()) void load() }
+    document.addEventListener("visibilitychange", resume)
+    window.addEventListener("focus", resume)
+    void load()
+    return () => {
+      controller.abort()
+      unwatch()
+      if (timer) clearTimeout(timer)
+      document.removeEventListener("visibilitychange", resume)
+      window.removeEventListener("focus", resume)
+    }
+  }, [server.uuid, watchNetwork])
   const samples = useMemo(() => combineNetworkHistory(metricHistory, recent, Date.now()), [metricHistory, recent])
   const chartData = useMemo(() => buildNetworkChartData(samples), [samples])
 
@@ -618,13 +647,16 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
   useEffect(() => {
     let cancelled = false
     const controller = new AbortController()
-    let currentData: KomariPingChartData | null = null
-    let refreshTimer: ReturnType<typeof setInterval> | undefined
+    let currentData: KomariPingChartData | null = getCachedPingChartData(uuid) ?? null
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined
     let refreshCount = 0
     let refreshing = false
+    let failures = 0
+    let nextDelay: number | null = 15_000
     setActiveChart("All")
     const showData = (data: KomariPingChartData) => {
       currentData = data
+      updateCachedPingChartData(uuid, data)
       setTasks(data.tasks)
       const byTask: Record<string, PingTaskChartPoint[]> = {}
       const loadedTaskMap = new Map(data.tasks.map((task) => [task.id, task]))
@@ -660,12 +692,13 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
       setFormattedData([...merged.values()].sort((a, b) => a.created_at - b.created_at))
     }
     const load = async () => {
-      if (refreshing || cancelled || document.visibilityState === "hidden") return
+      if (refreshing || cancelled || !isPageVisible()) return
       refreshing = true
+      if (refreshTimer) clearTimeout(refreshTimer)
       try {
         refreshCount++
-        if (!currentData?.points.length || refreshCount % 20 === 0) {
-          const next = await fetchPingChartData(uuid, 24, controller.signal)
+        if (!currentData?.points.length || !getCachedPingChartData(uuid) || refreshCount % 20 === 0) {
+          const next = await fetchPingChartData(uuid, 24, controller.signal, refreshCount % 20 === 0)
           if (!cancelled) {
             showData(next)
             setError(next.points.length > 0 ? null : "no_data")
@@ -676,31 +709,52 @@ function NetworkPingCharts({ uuid }: { uuid: string }) {
             fetchPingMetricStats(uuid, 24, controller.signal),
           ])
           if (!cancelled) {
-            const points = mergePingPoints(currentData.points, recent, false, Date.now() - 24 * 3_600_000)
-            const byTask = new Map(stats.stats.filter((stat) => stat.entity_id === uuid).map((stat) => [stat.task_id, stat]))
-            const tasks = currentData.tasks.map((task) => {
-              const stat = byTask.get(task.id)
-              return stat ? { ...task, loss: stat.loss, min: stat.min, max: stat.max, latest: stat.latest } : task
-            })
-            showData({ tasks, points })
-            setError(points.length > 0 ? null : "no_data")
+            const knownTasks = new Set(currentData.tasks.map((task) => task.id))
+            if (recent.some((point) => !knownTasks.has(point.taskId))) {
+              const next = await fetchPingChartData(uuid, 24, controller.signal, true)
+              if (!cancelled) { showData(next); setError(next.points.length > 0 ? null : "no_data") }
+            } else {
+              const points = mergePingPoints(currentData.points, recent, false, Date.now() - 24 * 3_600_000)
+              const byTask = new Map(stats.stats.filter((stat) => stat.entity_id === uuid).map((stat) => [stat.task_id, stat]))
+              const tasks = currentData.tasks.map((task) => {
+                const stat = byTask.get(task.id)
+                return stat ? { ...task, loss: stat.loss, min: stat.min, max: stat.max, latest: stat.latest } : task
+              })
+              showData({ tasks, points })
+              setError(points.length > 0 ? null : "no_data")
+            }
           }
         }
-      } catch {
+        failures = 0
+        nextDelay = 15_000
+      } catch (error) {
+        if (cancelled) return
+        nextDelay = getRetryDelay(error, ++failures, 15_000)
+        if (isAuthorizationError(error)) {
+          clearHistoryCaches()
+          showData({ tasks: [], points: [] })
+          currentData = null
+        }
         if (!cancelled && !currentData) setError("fetch_error")
       } finally {
         refreshing = false
         if (!cancelled) setLoading(false)
+        if (!cancelled && nextDelay !== null && isPageVisible()) refreshTimer = setTimeout(load, nextDelay)
       }
     }
-    setLoading(true)
+    const resume = () => { if (isPageVisible()) { failures = 0; void load() } }
+    setLoading(!currentData)
     setError(null)
+    if (currentData) showData(currentData)
     void load()
-    refreshTimer = setInterval(() => void load(), 15_000)
+    document.addEventListener("visibilitychange", resume)
+    window.addEventListener("focus", resume)
     return () => {
       cancelled = true
-      if (refreshTimer) clearInterval(refreshTimer)
+      if (refreshTimer) clearTimeout(refreshTimer)
       controller.abort()
+      document.removeEventListener("visibilitychange", resume)
+      window.removeEventListener("focus", resume)
     }
   }, [uuid])
 

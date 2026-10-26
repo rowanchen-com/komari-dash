@@ -31,7 +31,7 @@ export function combineNetworkHistory(
 ): NetworkSpeedSample[] {
   const firstLiveTimestamp = liveHistory[0]?.timestamp ?? Infinity
   return mergeNetworkHistories(
-    { server: metricHistory.filter((sample) => sample.timestamp < firstLiveTimestamp) },
+    { server: metricHistory.filter((sample) => sample.raw || sample.timestamp < firstLiveTimestamp) },
     { server: [...liveHistory] },
     now,
   ).server ?? []

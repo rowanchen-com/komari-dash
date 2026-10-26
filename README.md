@@ -22,13 +22,13 @@ A modern server monitoring dashboard theme for [Komari](https://github.com/komar
 
 ## Compatibility
 
-Currently supported and verified with **Komari 1.6.0 only**. Compatibility with older versions is no longer maintained. Support for future Komari versions will be stated here after validation.
+Supported and verified with **Komari 1.6.0 and 1.6.1**. Compatibility with older versions is no longer maintained. Support for future Komari versions will be stated here after validation.
 
 Data is read through `/api/rpc2`; the theme does not use legacy `/api/recent/*` or `/api/records/*` routes. The built-in admin and terminal interfaces remain owned by Komari.
 
 ## Installation
 
-1. Go to your Komari admin panel → Theme → Theme Management
+1. Open Theme Management in your Komari admin panel
 2. Upload the `KomariDash.zip` file from the [Releases](../../releases) page
 3. Done
 
@@ -39,14 +39,16 @@ npm ci
 npm run dev
 ```
 
-## Build
+## Production Build
 
 ```bash
-npm test
+npm ci
 npm run zip
 ```
 
 This generates `KomariDash.zip` ready for upload.
+
+Run `npm test` for pre-release validation. This does not change the production build mode.
 
 ## Configuration
 

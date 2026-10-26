@@ -2,6 +2,7 @@ import { Link } from "react-router-dom"
 import { memo } from "react"
 import ServerFlag from "@/components/ServerFlag"
 import ServerUsageBar from "@/components/ServerUsageBar"
+import { ServerCardField } from "@/components/ServerCardField"
 import { Card } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import type { ServerInfo } from "@/types/komari"
@@ -28,9 +29,9 @@ export default memo(function ServerCardInline({ server }: { server: ServerInfo }
 
   if (!server.online) {
     return (
-      <Link to={`/server/${server.uuid}`} onClick={saveSession} style={{ viewTransitionName: `server-${server.uuid}` }}>
+      <Link className="server-card-link" to={`/server/${server.uuid}`} onClick={saveSession} style={{ viewTransitionName: `server-${server.uuid}` }}>
         <Card className="flex min-h-[61px] min-w-[900px] flex-row items-center justify-start gap-3 p-3 transition-all hover:shadow-sm hover:ring-stone-300 md:px-5 lg:flex-row dark:hover:ring-stone-700">
-          <section className={cn("grid items-center gap-2 lg:w-40")} style={{ gridTemplateColumns: "auto auto 1fr" }}>
+          <ServerCardField as="section" uuid={server.uuid} name="identity" className={cn("grid items-center gap-2 lg:w-40")} style={{ gridTemplateColumns: "auto auto 1fr" }}>
             <span className="h-2 w-2 shrink-0 self-center rounded-full bg-red-500" />
             <div className={cn("flex items-center justify-center", showFlag ? "min-w-[17px]" : "min-w-0")}>
               {showFlag && <ServerFlag region={server.region} />}
@@ -38,16 +39,16 @@ export default memo(function ServerCardInline({ server }: { server: ServerInfo }
             <div className="relative w-28">
               <p className={cn("break-normal font-bold tracking-tight", showFlag ? "text-xs" : "text-sm")}>{server.name}</p>
             </div>
-          </section>
+          </ServerCardField>
         </Card>
       </Link>
     )
   }
 
   return (
-    <Link to={`/server/${server.uuid}`} onClick={saveSession} style={{ viewTransitionName: `server-${server.uuid}` }}>
+    <Link className="server-card-link" to={`/server/${server.uuid}`} onClick={saveSession} style={{ viewTransitionName: `server-${server.uuid}` }}>
       <Card className="flex min-h-[61px] w-full min-w-[900px] cursor-pointer items-center justify-start gap-3 p-3 transition-all hover:shadow-sm hover:ring-stone-300 md:px-5 lg:flex-row dark:hover:ring-stone-700">
-        <section className={cn("grid items-center gap-2 lg:w-36")} style={{ gridTemplateColumns: "auto auto 1fr" }}>
+        <ServerCardField as="section" uuid={server.uuid} name="identity" className={cn("grid items-center gap-2 lg:w-36")} style={{ gridTemplateColumns: "auto auto 1fr" }}>
           <span className="h-2 w-2 shrink-0 self-center rounded-full bg-green-500" />
           <div className={cn("flex items-center justify-center", showFlag ? "min-w-[17px]" : "min-w-0")}>
             {showFlag && <ServerFlag region={server.region} />}
@@ -55,11 +56,11 @@ export default memo(function ServerCardInline({ server }: { server: ServerInfo }
           <div className="relative w-28">
             <p className={cn("break-normal font-bold tracking-tight", showFlag ? "text-xs" : "text-sm")}>{server.name}</p>
           </div>
-        </section>
-        <Separator orientation="vertical" className="mx-0 ml-2 h-8" />
+        </ServerCardField>
+        <Separator orientation="vertical" className="server-card-field mx-0 ml-2 h-8" style={{ viewTransitionName: `server-${server.uuid}-separator` }} />
         <div className="flex flex-col gap-2">
           <section className="grid flex-1 grid-cols-9 items-center gap-3">
-            <div className="flex flex-row items-center gap-2 whitespace-nowrap">
+            <ServerCardField uuid={server.uuid} name="system" className="flex flex-row items-center gap-2 whitespace-nowrap">
               <div className="font-semibold text-xs">
                 {IsWindows(server.host.os) ? (
                   <MageMicrosoftWindows className="size-2.5" />
@@ -73,44 +74,44 @@ export default memo(function ServerCardInline({ server }: { server: ServerInfo }
                   {IsWindows(server.host.os) ? "Windows" : GetOsName(server.host.os)}
                 </div>
               </div>
-            </div>
-            <div className="flex w-20 flex-col">
+            </ServerCardField>
+            <ServerCardField uuid={server.uuid} name="uptime" className="flex w-20 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "Uptime")}</p>
               <div className="flex items-center font-semibold text-xs">
                 {(server.status.uptime / 86400).toFixed(0)} Days
               </div>
-            </div>
-            <div className="flex w-14 flex-col">
+            </ServerCardField>
+            <ServerCardField uuid={server.uuid} name="cpu" className="flex w-14 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "CPU")}</p>
               <div className="flex items-center font-semibold text-xs">{cpu.toFixed(2)}%</div>
               <ServerUsageBar value={cpu} />
-            </div>
-            <div className="flex w-14 flex-col">
+            </ServerCardField>
+            <ServerCardField uuid={server.uuid} name="memory" className="flex w-14 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "Mem")}</p>
               <div className="flex items-center font-semibold text-xs">{mem.toFixed(2)}%</div>
               <ServerUsageBar value={mem} />
-            </div>
-            <div className="flex w-14 flex-col">
+            </ServerCardField>
+            <ServerCardField uuid={server.uuid} name="disk" className="flex w-14 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "STG")}</p>
               <div className="flex items-center font-semibold text-xs">{stg.toFixed(2)}%</div>
               <ServerUsageBar value={stg} />
-            </div>
-            <div className="flex w-16 flex-col">
+            </ServerCardField>
+            <ServerCardField uuid={server.uuid} name="upload" className="flex w-16 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "Upload")}</p>
               <div className="min-w-0 font-semibold text-[11px] leading-tight">{up >= 1024 ? `${(up / 1024).toFixed(2)}G/s` : `${up.toFixed(2)}M/s`}</div>
-            </div>
-            <div className="flex w-16 flex-col">
+            </ServerCardField>
+            <ServerCardField uuid={server.uuid} name="download" className="flex w-16 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "Download")}</p>
               <div className="min-w-0 font-semibold text-[11px] leading-tight">{down >= 1024 ? `${(down / 1024).toFixed(2)}G/s` : `${down.toFixed(2)}M/s`}</div>
-            </div>
-            <div className="flex w-20 flex-col">
+            </ServerCardField>
+            <ServerCardField uuid={server.uuid} name="total-upload" className="flex w-20 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "TotalUpload")}</p>
               <div className="flex items-center font-semibold text-xs">{formatBytes(server.status.netOutTransfer)}</div>
-            </div>
-            <div className="flex w-20 flex-col">
+            </ServerCardField>
+            <ServerCardField uuid={server.uuid} name="total-download" className="flex w-20 flex-col">
               <p className="text-muted-foreground text-xs">{t("ServerCard", "TotalDownload")}</p>
               <div className="flex items-center font-semibold text-xs">{formatBytes(server.status.netInTransfer)}</div>
-            </div>
+            </ServerCardField>
           </section>
         </div>
       </Card>

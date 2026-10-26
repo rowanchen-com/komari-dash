@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { buildNetworkMetricHistory, buildPingChartData, buildRecentNetworkHistory, fetchNetworkMetricHistory, fetchPingChartData, fetchRecentPingChartPoints, fetchPublicInfo, fetchRecentNetworkData, mergePingPoints, normalizeLatestStatuses, normalizeNodes, normalizeServer } from "@/lib/komari-rpc"
+import { buildNetworkMetricHistory, buildPingChartData, buildRecentNetworkHistory, clearHistoryCaches, fetchNetworkMetricHistory, fetchPingChartData, fetchRecentPingChartPoints, fetchPublicInfo, fetchRecentNetworkData, mergePingPoints, normalizeLatestStatuses, normalizeNodes, normalizeServer } from "@/lib/komari-rpc"
 import { parseRpcResponse } from "@/lib/rpc2"
 
 const nodeResponse = {
@@ -26,9 +26,30 @@ const nodeResponse = {
   },
 }
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => { clearHistoryCaches(); vi.unstubAllGlobals() })
 
-describe("Komari 1.6.0 RPC2 adapters", () => {
+describe("Komari 1.6.0 / 1.6.1 RPC2 adapters", () => {
+  it("caches full ping history per node and range without rounding, and can force a refresh", async () => {
+    const mock = vi.fn(async (_url: string, options: RequestInit) => {
+      const { method, params } = JSON.parse(String(options.body))
+      const result = method === "public:getPublicPingTasks" ? [{ id: 1, name: "Probe" }] :
+        method === "public:getPingMetricStats" ? { stats: [] } : { series: [{
+          metric_key: "ping.latency_ms", entity_id: params.entity_id, tags: { task_id: "1" },
+          points: [{ time: "2026-10-26T00:00:00Z", value: 0.00125 }],
+        }] }
+      return new Response(JSON.stringify({ jsonrpc: "2.0", result }))
+    })
+    vi.stubGlobal("fetch", mock)
+    const first = await fetchPingChartData("a", 24)
+    expect(await fetchPingChartData("a", 24)).toBe(first)
+    expect(first.points[0].value).toBe(0.00125)
+    expect(mock).toHaveBeenCalledTimes(4)
+    await fetchPingChartData("b", 24)
+    await fetchPingChartData("a", 12)
+    expect(mock).toHaveBeenCalledTimes(12)
+    await fetchPingChartData("a", 24, undefined, true)
+    expect(mock).toHaveBeenCalledTimes(16)
+  })
   it("overlays precise ten-minute network samples onto the fifteen-minute rollup", async () => {
     const mock = vi.fn(async (_url: string, options: RequestInit) => {
       const { params } = JSON.parse(String(options.body))

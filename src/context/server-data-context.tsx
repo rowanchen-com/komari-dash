@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react"
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react"
 import type { KomariLatestStatus, KomariNode, ServerInfo, ServerOverview } from "@/types/komari"
-import { fetchLatestStatuses, fetchNodes, fetchRecentNetworkData, normalizeServer, type NetworkSpeedSample } from "@/lib/komari-rpc"
+import { clearHistoryCaches, fetchLatestStatuses, fetchNodes, fetchRecentNetworkData, normalizeServer, type NetworkSpeedSample } from "@/lib/komari-rpc"
 import { mergeNetworkHistories } from "@/lib/network-chart"
+import { getRetryDelay, isAuthorizationError } from "@/lib/rpc2"
 
 export interface ServerDataWithTimestamp {
   timestamp: number
@@ -14,6 +15,7 @@ interface ServerDataContextType {
   isLoading: boolean
   history: ServerDataWithTimestamp[]
   networkHistory: Record<string, NetworkSpeedSample[]>
+  watchNetwork: (uuid: string) => () => void
 }
 
 const ServerDataContext = createContext<ServerDataContextType | undefined>(undefined)
@@ -105,6 +107,15 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
   const [history, setHistory] = useState<ServerDataWithTimestamp[]>([])
   const [networkHistory, setNetworkHistory] = useState<Record<string, NetworkSpeedSample[]>>({})
   const previousServersRef = useRef<Map<string, ServerInfo>>(new Map())
+  const networkWatchers = useRef(new Map<string, number>())
+  const watchNetwork = useCallback((uuid: string) => {
+    networkWatchers.current.set(uuid, (networkWatchers.current.get(uuid) ?? 0) + 1)
+    return () => {
+      const count = (networkWatchers.current.get(uuid) ?? 1) - 1
+      if (count > 0) networkWatchers.current.set(uuid, count)
+      else networkWatchers.current.delete(uuid)
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -113,6 +124,8 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
     let nodes: KomariNode[] = []
     let nodesLoadedAt = 0
     let initialized = false
+    let failures = 0
+    let nextDelay: number | null = POLL_INTERVAL
     const controller = new AbortController()
 
     const applyStatuses = (statuses: Record<string, KomariLatestStatus>, recentHistory: Record<string, NetworkSpeedSample[]>, initial = false) => {
@@ -140,8 +153,8 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
     }
 
     const schedulePoll = () => {
-      if (!cancelled && document.visibilityState !== "hidden") {
-        timer = setTimeout(poll, POLL_INTERVAL)
+      if (!cancelled && document.visibilityState !== "hidden" && nextDelay !== null) {
+        timer = setTimeout(poll, nextDelay)
       }
     }
 
@@ -159,14 +172,28 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
         if (cancelled) return
         nodes = nodeList
         if (refreshNodes) nodesLoadedAt = Date.now()
-        const { statuses, history: recentHistory } = await fetchRecentNetworkData(nodes, latest, controller.signal)
+        const watchedNodes = nodes.filter((node) => networkWatchers.current.has(node.uuid))
+        const { statuses, history: recentHistory } = await fetchRecentNetworkData(watchedNodes, latest, controller.signal)
         if (cancelled) return
         applyStatuses(statuses, recentHistory, !initialized)
         initialized = true
+        failures = 0
+        nextDelay = POLL_INTERVAL
         setError(undefined)
       } catch (pollError) {
-        // Preserve a successful snapshot, but keep retrying an initial failure.
-        if (!cancelled && !initialized) setError(pollError instanceof Error ? pollError : new Error(String(pollError)))
+        if (cancelled) return
+        nextDelay = getRetryDelay(pollError, ++failures)
+        if (isAuthorizationError(pollError)) {
+          clearHistoryCaches()
+          setData(undefined)
+          setHistory([])
+          setNetworkHistory({})
+          previousServersRef.current.clear()
+          nodes = []
+          nodesLoadedAt = 0
+          initialized = false
+        }
+        if (!initialized || nextDelay === null) setError(pollError instanceof Error ? pollError : new Error(String(pollError)))
       } finally {
         polling = false
         if (!cancelled) setIsLoading(false)
@@ -177,10 +204,14 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
     const handleVisibilityChange = () => {
       if (timer) clearTimeout(timer)
       timer = undefined
-      if (document.visibilityState !== "hidden") void poll()
+      if (document.visibilityState !== "hidden") {
+        failures = 0
+        void poll()
+      }
     }
 
     document.addEventListener("visibilitychange", handleVisibilityChange)
+    window.addEventListener("focus", handleVisibilityChange)
     void poll()
 
     return () => {
@@ -188,11 +219,12 @@ export function ServerDataProvider({ children }: { children: ReactNode }) {
       controller.abort()
       if (timer) clearTimeout(timer)
       document.removeEventListener("visibilitychange", handleVisibilityChange)
+      window.removeEventListener("focus", handleVisibilityChange)
     }
   }, [])
 
   return (
-    <ServerDataContext.Provider value={{ data, error, isLoading, history, networkHistory }}>
+    <ServerDataContext.Provider value={{ data, error, isLoading, history, networkHistory, watchNetwork }}>
       {children}
     </ServerDataContext.Provider>
   )
